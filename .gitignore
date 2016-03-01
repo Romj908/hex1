@@ -1,0 +1,16 @@
+# prevent any netbeans project file.
+nbproject
+dist
+build
+Makefile
+.dep.inc
+#prevent object files and similar generated files.
+*.[oa]
+*.sav
+*.o.d
+
+
+
+
+
+
