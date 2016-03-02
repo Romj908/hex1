@@ -32,6 +32,10 @@ typedef struct {
         mIndex line, column;
     } HexCoords;
     
+enum Direction 
+{
+    NEast, SEast, East , NWest, West, SWest, NbDirections
+};
     
 union HexCoord
 {
@@ -70,10 +74,6 @@ std::ostream& operator<<(std::ostream& o, Hexagon& h);
 class Hexmap
 {
 public:
-    enum Direction 
-    {
-        NEast, SEast, East , NWest, West, SWest, NbDirections
-    };
 protected:
     static const HexCoord dirToVect[2][NbDirections]; // [2] both even/odd lines.
     

@@ -32,25 +32,25 @@ HexCoord::HexCoord(Coordl l)
 
 
 const HexCoord 
-Hexmap::dirToVect [2][Hexmap::NbDirections] = 
+Hexmap::dirToVect [2][NbDirections] = 
 {
     // even lines
     [0]={
-        [Hexmap::NEast]= {-1, +0},
-        [Hexmap::SEast]= {+1, +0},
-        [Hexmap::East]=  {+0, +1},
-        [Hexmap::NWest]= {-1, -1},
-        [Hexmap::West]=  {+0, -1},
-        [Hexmap::SWest]= {+1, -1},
+        [NEast]= {-1, +0},
+        [SEast]= {+1, +0},
+        [East]=  {+0, +1},
+        [NWest]= {-1, -1},
+        [West]=  {+0, -1},
+        [SWest]= {+1, -1},
     },
     // odd lines
     [1]={
-        [Hexmap::NEast]= {-1, +1},
-        [Hexmap::SEast]= {+1, +1},
-        [Hexmap::East]=  {+0, +1},
-        [Hexmap::NWest]= {-1, +0},
-        [Hexmap::West]=  {+0, -1},
-        [Hexmap::SWest]= {+1, +0},
+        [NEast]= {-1, +1},
+        [SEast]= {+1, +1},
+        [East]=  {+0, +1},
+        [NWest]= {-1, +0},
+        [West]=  {+0, -1},
+        [SWest]= {+1, +0},
    }
 };
 
@@ -151,7 +151,7 @@ Hexmap::getCoordL(Hexagon& h, const HexCoord& vect) const
 }
 
 Hexagon* 
-Hexmap::getHex(Hexagon& h, Hexmap::Direction dir) const
+Hexmap::getHex(Hexagon& h, Direction dir) const
 {
     HexCoord aux;
     
