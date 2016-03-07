@@ -9,7 +9,7 @@
 using namespace std;
 
 template <typename T_> 
-T_* circular_list::
+T_* circular_list<T_>::
 first()
 {
         assert(this->container == NULL);// list head.
@@ -22,7 +22,7 @@ first()
     
 }
 template <typename T_> 
-T_* circular_list::
+T_* circular_list<T_>::
 last ()
 {
         assert(this->container == NULL);// list head.
@@ -32,13 +32,12 @@ last ()
         }
         else
             return NULL;
-    
 }
 
 
 
 template <typename T_> 
-void circular_list::
+void circular_list<T_>::
 insert_after(circular_list<T_> *elt)
 {
         assert(this->container != NULL); // cannot be a list head.
@@ -48,7 +47,7 @@ insert_after(circular_list<T_> *elt)
 }
 
 template <typename T_> 
-void circular_list::
+void circular_list<T_>::
 insert_before(circular_list<T_> *elt)
 {
         assert(this->container != NULL);// cannot be a list head.
@@ -59,7 +58,7 @@ insert_before(circular_list<T_> *elt)
 
 
 template <typename T_> 
-void circular_list::
+void circular_list<T_>::
 push(circular_list<T_> *newElt)
 {
     assert(this->container == NULL);
@@ -70,7 +69,7 @@ push(circular_list<T_> *newElt)
 }
 
 template <typename T_> 
-void circular_list::
+void circular_list<T_>::
 push_back(circular_list<T_> *newElt)
 {
     assert(this->container == NULL);
@@ -81,7 +80,7 @@ push_back(circular_list<T_> *newElt)
 }
 
 template <typename T_> 
-T_* circular_list::
+T_* circular_list<T_>::
 extract()
 {
         assert(this->container != NULL);// cannot be a list head.
@@ -94,7 +93,7 @@ extract()
 }
 
 template <typename T_> 
-circular_list<T_>* circular_list::
+circular_list<T_>* circular_list<T_>::
 pop()
 {
         assert(this->container == NULL);// list head.
@@ -109,22 +108,9 @@ pop()
             return NULL;
     
 }
-template <typename T_> 
-T_* circular_list::
-pop()
-{
-        circular_list<T_>* first = pop();
-        
-        if (first != NULL)
-        {
-            return first->payload;
-        }
-        else
-            return NULL;
-}
 
 template <typename T_> 
-circular_list<T_>* circular_list::
+circular_list<T_>* circular_list<T_>::
 pop_back()
 {
         assert(this->container == NULL);// list head.
@@ -139,23 +125,9 @@ pop_back()
             return NULL;
     
 }
-template <typename T_> 
-T_* circular_list::
-pop_back()
-{
-        circular_list<T_>* first = pop();
-        
-        if (first != NULL)
-        {
-            return first->payload;
-        }
-        else
-            return NULL;
-}
-
 
 template <typename T_> 
-void circular_list::
+void circular_list<T_>::
 replace(circular_list<T_> *elt)
 {
         assert(this->container != NULL);
@@ -173,7 +145,7 @@ replace(circular_list<T_> *elt)
  *
  */
 template <typename T_> 
-void circular_list::
+void circular_list<T_>::
 replace_by(circular_list<T_> *newElt)
 {
         // both elements shall have the same natur (list head or payload element.)
@@ -193,13 +165,13 @@ replace_by(circular_list<T_> *newElt)
  * @head: the head of the new list
  */
  template <typename T_> 
- void circular_list::
+ void circular_list<T_>::
  move_elt(circular_list<T_> *head)
 {
         assert(head->payload == NULL);
         assert(this->payload != NULL);
         __remove(this->prev, this->next);
-        head->push(this)
+        head->push(this);
 }
 
 /**
@@ -207,14 +179,14 @@ replace_by(circular_list<T_> *newElt)
  * @head: the head that will follow our entry
  */
 template <typename T_> 
-void circular_list::
+void circular_list<T_>::
 move_elt_tail(circular_list<T_> *head)
 {
         assert(head->payload == NULL);
         assert(this->payload != NULL);
         
         __remove(this->prev, this->next);
-        head->push_back(this)
+        head->push_back(this);
 }
 
 /**
@@ -223,7 +195,7 @@ move_elt_tail(circular_list<T_> *head)
  * @head: the head of the list
  */
 template <typename T_> 
-bool circular_list::
+bool circular_list<T_>::
 is_last(const circular_list<T_> *head)
 {
         assert(head->payload == NULL);
@@ -237,7 +209,7 @@ is_last(const circular_list<T_> *head)
  * @this: the head of the list. An assert is firing if not a list's head.
  */
 template <typename T_> 
-void circular_list::
+void circular_list<T_>::
 rotate_left()
 {
         assert(payload == NULL);
@@ -247,7 +219,7 @@ rotate_left()
 }
 
 template <typename T_> 
-int circular_list::
+int circular_list<T_>::
 is_singular()
 {
         assert(payload == NULL);
@@ -255,7 +227,7 @@ is_singular()
 }
 
 template <typename T_> 
-void circular_list::
+void circular_list<T_>::
 truncate(circular_list<T_> *entry,
          circular_list<T_> *list )
 {
@@ -282,7 +254,7 @@ truncate(circular_list<T_> *entry,
 }
 
 template <typename T_> 
-void circular_list::
+void circular_list<T_>::
 append(const circular_list<T_> *list)
 {
         assert(list->payload == NULL);
@@ -293,7 +265,7 @@ append(const circular_list<T_> *list)
 }
 
 template <typename T_> 
-void circular_list:: 
+void circular_list<T_>:: 
 append_back(circular_list<T_> *list)
 {
         assert(list->payload == NULL);

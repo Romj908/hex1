@@ -8,8 +8,6 @@
 #ifndef DLINK_H
 #define DLINK_H
 
-#ifndef _LINUX_LIST_H
-#define _LINUX_LIST_H
 #include <stddef.h>
 
 /*
@@ -36,8 +34,10 @@ template <typename T_>
 struct circular_list
 {
     
-private:
-    struct circular_list<T_> *next, prev;
+//private:
+    
+    struct circular_list<T_> *next;
+    struct circular_list<T_> *prev;
     
     /* the offsetof() macro that is used in C to retrieve the address of the 
      * containing struct cannot be used easily in C++. The class cannot use
@@ -50,7 +50,7 @@ private:
     T_ *payload; // NULL for the list's head. The onwner object if an element of the list.
     
     circular_list(T_ *listEltOf) {payload = listEltOf; next = this; prev = this;};
-    init(){next = this; prev = this;};
+    void init(){next = this; prev = this;};
 
     /*
      * Insert the object between two known consecutive entries.
@@ -168,12 +168,6 @@ public:
      */
     circular_list<T_>* pop();
     
-    /**
-     * pop - second prototype. Like the first one but the pointer to the 
-     * englobing object is returned instead.
-     */
-    
-    T_*   pop();
     
     /**
      * pop_back - first prototype.
@@ -184,13 +178,6 @@ public:
      */
     circular_list<T_>* pop_back();
     
-    /**
-     * pop_back - second prototype. Like the first one but the pointer to the 
-     * englobing object is returned instead.
-     */
-    
-    T_*   pop_back();
-
     /**
      * replace - replace old entry by new one
      * @old : the element to be replaced. Cannot be a list's head.
