@@ -16,18 +16,20 @@ class FooLinkableObject;
 
 class FooLinkableObject
 {
-public:
     int identity;
-    circular_list<FooLinkableObject> list_elt;
-    FooLinkableObject() : list_elt(this) {}
     
+public:
+    circular_list<FooLinkableObject> list_elt;
+    // constructors
+    FooLinkableObject() : list_elt(this) {}
     FooLinkableObject(int id): identity(id), list_elt(this) {};
-    friend ostream& operator<<(ostream& o, FooLinkableObject & obj);
+    
+    friend ostream& operator<<(ostream& o, FooLinkableObject * obj);
     
 };
-ostream& operator<<(ostream& o, FooLinkableObject & obj)
+ostream& operator<<(ostream& o, FooLinkableObject *obj)
 {
-    o << "FooLinkableObject id " << obj.identity;
+    o << "FooLinkableObject id " << obj->identity;
     return o;
 }
 
@@ -47,7 +49,7 @@ void FooMasterObject::disp_list()
     cout << "\n";
     list_for_each(p, &the_list)
     {
-        cout << p << endl;
+        cout << p->object() << endl;
     }
 }
 int test1_circList(void)
@@ -57,8 +59,10 @@ int test1_circList(void)
     for (int i=0; i<10; i++)
     {
         FooLinkableObject *obj = new FooLinkableObject(i);
+        cout << "\n" << i << " is empty ? " << obj->list_elt.empty() << " is head ? " << obj->list_elt.is_head();
         master.the_list.push( &(obj->list_elt) ); 
     }
     master.disp_list();
+    cout << "\n is master's list head list ? " << master.the_list.is_head();
     
 }

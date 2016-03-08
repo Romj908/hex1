@@ -15,6 +15,7 @@
 #include <iostream>
 
 #include "core/hexmap.h"
+#include "util/circList.h"
 
 using namespace std;
 using namespace HexagonMapNSpace;
@@ -27,7 +28,8 @@ using namespace HexagonMapNSpace;
 int main(int argc, char** argv) 
 {
     
-    test1_Hexmap_hexDist();
+    //test1_Hexmap_hexDist();
+    test1_circList();
     return 0;
 }
 
