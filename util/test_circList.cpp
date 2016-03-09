@@ -16,9 +16,9 @@ class FooLinkableObject;
 
 class FooLinkableObject
 {
+public:
     int identity;
     
-public:
     circular_list<FooLinkableObject> list_elt;
     // constructors
     FooLinkableObject() : list_elt(this) {}
@@ -55,14 +55,33 @@ void FooMasterObject::disp_list()
 int test1_circList(void)
 {
     FooMasterObject master;
+    FooMasterObject master2;
+    FooLinkableObject *obj;
+    circular_list<FooLinkableObject> *p;
     
+    cout << "\n master list elts 9 to 0 ";
     for (int i=0; i<10; i++)
     {
-        FooLinkableObject *obj = new FooLinkableObject(i);
-        cout << "\n" << i << " is empty ? " << obj->list_elt.empty() << " is head ? " << obj->list_elt.is_head();
+        obj = new FooLinkableObject(i);
         master.the_list.push( &(obj->list_elt) ); 
     }
-    master.disp_list();
-    cout << "\n is master's list head list ? " << master.the_list.is_head();
+    master.disp_list(); 
+    
+    assert((master.the_list.first())->identity == 9);
+    assert((master.the_list.last())->identity == 0);
+    cout << "\n de-queing master's elts and queing them to master2 ";
+    
+    while (!master.the_list.empty())
+    {
+        p = master.the_list.pop_back();
+        master2.the_list.push_back(p);
+    }
+    master.disp_list(); 
+    assert(master.the_list.empty());
+    master2.disp_list(); 
+    assert((master2.the_list.first())->identity == 0);
+    assert((master2.the_list.last())->identity == 9);
+    
+    
     
 }

@@ -106,7 +106,7 @@ public:
         assert(this->payload == NULL);// list head.
         if (!empty())
         {
-            return this->next;
+            return this->next->object();
         }
         else
             return NULL;
@@ -119,7 +119,7 @@ public:
             assert(this->payload == NULL);// list head.
             if (!empty())
             {
-                return this->prev;
+                return this->prev->object();
             }
             else
                 return NULL;
