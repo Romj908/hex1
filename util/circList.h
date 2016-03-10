@@ -10,6 +10,7 @@
 
 #include <stddef.h>
 #include "assert.h"
+#include <iterator>
 
 /*
  * Simple doubly linked list implementation derivated from the kernel's list.h
@@ -162,12 +163,8 @@ public:
      * This is good for implementing stacks.
      */
     void 
-    push(circular_list<T_> *newElt)
-    {
-        assert(this->payload == NULL);
-        assert(newElt->payload != NULL);
-        newElt->__insert(this, next);
-    }
+    push(circular_list<T_> *newElt);
+
     /**
      * push_back - push the indicated element to the end of the list
      * @newElt: list head 
@@ -176,30 +173,14 @@ public:
      * This is good for implementing queues.
      */
     void 
-    push_back(circular_list<T_> *newElt)
-    {
-        assert(this->payload == NULL);
-        assert(newElt->payload != NULL);
-        newElt->__insert(this->prev, this);
-    }
-
+    push_back(circular_list<T_> *newElt);
+    
     /**
      * extract - deletes the object from its list and reinitialize it.
      * @this: a list element. Cannot be a list head.
      * @return the pointer to the queued object.
      */
-    T_* 
-    extract()
-    {
-            assert(this->payload != NULL);// cannot be a list head.
-            if (!empty())
-            {
-                __remove(this->prev, this->next);
-                this->init();
-            }
-            return this->payload;
-    }
-
+    T_* extract();
   
     /**
      * pop - first prototype.
@@ -209,20 +190,7 @@ public:
      * This is good for implementing stacks.
      */
     circular_list<T_>* 
-    pop()
-    {
-            assert(this->payload == NULL);// list head.
-            if (!empty())
-            {
-                circular_list<T_>*first = this->next;
-                __remove(this, first->next);
-                first->init();
-                return first;
-            }
-            else
-                return NULL;
-    }
-
+    pop();
     
     /**
      * pop_back - first prototype.
@@ -232,19 +200,7 @@ public:
      * This is good for implementing queues.
      */
     circular_list<T_>* 
-    pop_back()
-    {
-            assert(this->payload == NULL);// list head.
-            if (!empty())
-            {
-                circular_list<T_>*last = this->prev;
-                __remove(last->prev, this);
-                last->init();
-                return last;
-            }
-            else
-                return NULL;
-    }
+    pop_back();
     
     /**
      * replace - replace old entry by new one
@@ -254,62 +210,30 @@ public:
      * If @old was empty, it will be overwritten.
      */
     void 
-    replace(circular_list<T_> *elt)
-    {
-            assert(this->payload != NULL);
-            assert(elt->payload != NULL);
-            this->next = elt->next;
-            this->next->prev = this;
-            this->prev = elt->prev;
-            this->prev->next = this;
-            elt->init();
-    }
+    replace(circular_list<T_> *elt);
+
     /**
      * replace_by - replace old entry by new one
      * @this : the element to be replaced. Can be a list head or not.
      * @newElt : the new element to insert.  Can be a list head or not.
      */
     void 
-    replace_by(circular_list<T_> *newElt)
-    {
-            // both elements shall have the same natur (list head or payload element.)
-            assert(this->payload == newElt->payload);
-            if (empty())
-                return;
-            newElt->next = this->next;
-            newElt->next->prev = newElt;
-            newElt->prev = this->prev;
-            newElt->prev->next = newElt;
-            this->init();
-    }
+    replace_by(circular_list<T_> *newElt);
 
     /**
      * move - remove the current element from its list and push it into another one
      * @this: the entry to move
      * @head: the head of the new list
      */
-        void 
-        move_elt(circular_list<T_> *head)
-       {
-               assert(head->payload == NULL);
-               assert(this->payload != NULL);
-               __remove(this->prev, this->next);
-               head->push(this);
-       }
+    void 
+    move_elt(circular_list<T_> *head);
 
     /**
      * move_tail - delete from one list and add as another's tail
      * @head: the head that will follow our entry
      */
     void 
-    move_elt_tail(circular_list<T_> *head)
-    {
-            assert(head->payload == NULL);
-            assert(this->payload != NULL);
-            __remove(this->prev, this->next);
-            head->push_back(this);
-    }
-
+    move_elt_tail(circular_list<T_> *head);
     /**
      * is_last - tests whether the object is the last entry in list @head
      * @this: the entry to test
@@ -328,14 +252,7 @@ public:
     * @this: the head of the list. An assert is firing if not a list's head.
     */
    void 
-   rotate_left()
-   {
-           assert(payload == NULL);
-           if (!empty()) {
-                   next->move_elt_tail(this);
-           }
-   }
-
+   rotate_left();
 
     /**
      * is_singular - tests whether the list has just one entry.
@@ -364,29 +281,7 @@ public:
      */
     void 
     truncate(circular_list<T_> *entry,
-             circular_list<T_> *list )
-    {
-            assert(payload == NULL);
-            assert(list->payload == NULL);
-            assert(entry->payload!=NULL);
-            if (empty())
-                    return;
-            if (is_singular() &&
-                (this->next != entry && this != entry))
-                return;
-            if (entry == this)
-                list->init();
-            else
-            {
-                circular_list<T_> *new_first = entry->next;
-                list->next = this->next;
-                list->next->prev = list;
-                list->prev = entry;
-                entry->next = list;
-                this->next = new_first;
-                new_first->prev = this;
-            }
-    }
+             circular_list<T_> *list );
 
     /**
      * append - insert the given list at the head of the current list.
@@ -417,7 +312,158 @@ public:
     }
 };
  
- 
+
+
+template <typename T_>
+void circular_list<T_>::
+push(circular_list<T_> *newElt)
+{
+    assert(this->payload == NULL);
+    assert(newElt->payload != NULL);
+    newElt->__insert(this, next);
+}
+
+template <typename T_>
+void circular_list<T_>::
+push_back(circular_list<T_> *newElt)
+{
+    assert(this->payload == NULL);
+    assert(newElt->payload != NULL);
+    newElt->__insert(this->prev, this);
+}
+
+template <typename T_>
+T_* circular_list<T_>::
+extract()
+{
+        assert(this->payload != NULL);// cannot be a list head.
+        if (!empty())
+        {
+            __remove(this->prev, this->next);
+            this->init();
+        }
+        return this->payload;
+}
+
+template <typename T_>
+circular_list<T_>* circular_list<T_>::
+pop()
+{
+        assert(this->payload == NULL);// list head.
+        if (!empty())
+        {
+            circular_list<T_>*first = this->next;
+            __remove(this, first->next);
+            first->init();
+            return first;
+        }
+        else
+            return NULL;
+}
+
+template <typename T_>
+circular_list<T_>* circular_list<T_>::
+pop_back()
+{
+        assert(this->payload == NULL);// list head.
+        if (!empty())
+        {
+            circular_list<T_>*last = this->prev;
+            __remove(last->prev, this);
+            last->init();
+            return last;
+        }
+        else
+            return NULL;
+}
+
+template <typename T_>
+void circular_list<T_>::
+replace(circular_list<T_> *elt)
+{
+        assert(this->payload != NULL);
+        assert(elt->payload != NULL);
+        this->next = elt->next;
+        this->next->prev = this;
+        this->prev = elt->prev;
+        this->prev->next = this;
+        elt->init();
+}
+
+template <typename T_>
+void circular_list<T_>::
+replace_by(circular_list<T_> *newElt)
+{
+        // both elements shall have the same natur (list head or payload element.)
+        assert(this->payload == newElt->payload);
+        if (empty())
+            return;
+        newElt->next = this->next;
+        newElt->next->prev = newElt;
+        newElt->prev = this->prev;
+        newElt->prev->next = newElt;
+        this->init();
+}
+
+template <typename T_>
+void circular_list<T_>::
+move_elt(circular_list<T_> *head)
+{
+       assert(head->payload == NULL);
+       assert(this->payload != NULL);
+       __remove(this->prev, this->next);
+       head->push(this);
+}
+
+
+template <typename T_>
+void circular_list<T_>::
+move_elt_tail(circular_list<T_> *head)
+{
+        assert(head->payload == NULL);
+        assert(this->payload != NULL);
+        __remove(this->prev, this->next);
+        head->push_back(this);
+}
+
+template <typename T_>
+void circular_list<T_>::
+rotate_left()
+{
+        assert(payload == NULL);
+        if (!empty()) {
+                next->move_elt_tail(this);
+        }
+}
+
+template <typename T_> 
+void circular_list<T_>::
+truncate(circular_list<T_> *entry,
+         circular_list<T_> *list )
+{
+        assert(payload == NULL);
+        assert(list->payload == NULL);
+        assert(entry->payload!=NULL);
+        if (empty())
+                return;
+        if (is_singular() &&
+            (this->next != entry && this != entry))
+            return;
+        if (entry == this)
+            list->init();
+        else
+        {
+            circular_list<T_> *new_first = entry->next;
+            list->next = this->next;
+            list->next->prev = list;
+            list->prev = entry;
+            entry->next = list;
+            this->next = new_first;
+            new_first->prev = this;
+        }
+}
+
+
 // Test functions:
 extern int test1_circList(void);
 
