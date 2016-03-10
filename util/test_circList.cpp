@@ -82,6 +82,35 @@ int test1_circList(void)
     assert((master2.the_list.first())->identity == 0);
     assert((master2.the_list.last())->identity == 9);
     
+    cout << "\n de-queing master's elts and queing them to master2\n ";
+    list_for_each(p, &master2.the_list)
+    {
+        cout << p->object() << endl;
+    }
+
+    cout << "\n test of trucation. move the master2 elements [0..3] to master\n ";
+    circular_list<FooLinkableObject> *p3;
+
+    list_for_each(p, &master2.the_list)
+    {
+        if (p->object()->identity == 3)
+        {
+            p3 = p;
+            break;
+        }
+    }
+    master2.the_list.truncate(p3, &master.the_list);
     
+    cout << "\n master2:\n ";
+    master2.disp_list(); 
+
+    cout << "\n master:\n ";
+    master.disp_list(); 
     
+    assert((master.the_list.first())->identity == 0);
+    assert((master.the_list.last())->identity == 3);
+    
+    assert((master2.the_list.first())->identity == 4);
+    assert((master2.the_list.last())->identity == 9);
+
 }
