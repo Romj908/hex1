@@ -30,6 +30,7 @@ int main(int argc, char** argv)
     
     //test1_Hexmap_hexDist();
     test1_circList();
+    test2_circList();
     return 0;
 }
 

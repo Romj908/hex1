@@ -13,15 +13,22 @@
 #include <iterator>
 
 /*
- * Simple doubly linked list implementation derivated from the kernel's list.h
- *
+ * Efficient doubly linked list implementation derivated from the kernel's list.h
+ * the circular_list<T_> template 
  */
+
+// forward declaration of the iterator class because it is required by the 
+// definition of circular_list::begin() and circular_list::end()
+template <typename PAYLOAD>
+class CircListIterator;
+
 
 
 template <typename T_>
 struct circular_list
 {
-    
+public:    
+    typedef CircListIterator<T_> iterator;
 //private:
     
     struct circular_list<T_> *next;
@@ -126,6 +133,30 @@ public:
                 return NULL;
     }
 
+    /**
+     * begin() standart function to start a list traversal (used with iterators)
+     * The this must be a list head.
+     * @return 
+     */
+    iterator begin()
+    {
+        assert(this->payload == NULL);// list head.
+        iterator it(this->next);
+        return it;
+    }
+
+    /**
+     * end() standart function to end a list traversal (used with iterators)
+     * The this must be a list head.
+     * @return the pointer when all the list has been scanned. It's the this.
+     */
+    iterator end ()
+    {
+            assert(this->payload == NULL);// list head.
+            iterator it(this);
+            return it;
+    }
+    
     /**
      * insert_after - insert the object right after the indicated item
      * @this: new entry to be added. must be list element (not a list head).
@@ -467,6 +498,7 @@ truncate(circular_list<T_> *entry,
 // Test functions:
 extern int test1_circList(void);
 
+extern int test2_circList(void);
 
 /**
  * list_for_each	-	iterate over a list
@@ -504,6 +536,51 @@ extern int test1_circList(void);
 	for (pos = (head)->prev, n = pos->prev; \
 	     pos != (head); \
 	     pos = n, n = pos->prev)
+
+
+
+/**
+ * Definition of the circular_list's iterator, which would allow to make its
+ * attributes next, prev and payload private (they are public only to allow
+ * the use of the iterator macro a la C mode (list_for_each(), ...)
+ * Our iterator's value-type must be of course the same "PAYLOAD" class than in
+ * circular_list<PAYLOAD> because it describes the type of the payload objects.
+ */
+template <typename PAYLOAD>
+class CircListIterator : public std::iterator<std::input_iterator_tag, circular_list<PAYLOAD>>
+{
+  circular_list<PAYLOAD>* p_elt;
+  
+public:
+  
+  CircListIterator(circular_list<PAYLOAD>* x = nullptr) :p_elt(x) {}
+  CircListIterator(const CircListIterator& iter) : p_elt(iter.p_elt) {}
+  virtual ~CircListIterator() {};
+  
+  CircListIterator& operator++() 
+  {
+      
+      p_elt = p_elt->next;
+      return *this;
+  }
+  
+  CircListIterator operator++(int) 
+  {
+      CircListIterator tmp(*this); 
+      operator++(); 
+      return tmp;
+  }
+  
+  bool operator==(const CircListIterator& iter) {return p_elt==iter.p_elt;}
+  bool operator!=(const CircListIterator& iter) {return p_elt!=iter.p_elt;}
+  
+  PAYLOAD& operator*() 
+  {
+      assert(p_elt->payload);
+      return *(p_elt->payload);
+  }
+};
+
 
 
 #endif /* DLINK_H */
