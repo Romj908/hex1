@@ -13,9 +13,14 @@
 #include <iterator>
 
 /*
- * Efficient doubly linked list implementation derivated from the kernel's list.h
- * the circular_list<T_> template 
- */
+ * Simple doubly linked list implementation inspired from the kernel's <list.h>.
+ * This implementation of a circular list only use pointers statically defined 
+ * in the objects that have to be linked. 
+  * The head of the list is also 
+ * The circular_list<T_> instances have to be defined as attribute of their T_ class.
+ * The circular_list_
+ * One same object may contain several instrances of 
+*/
 
 // forward declaration of the iterator class because it is required by the 
 // definition of circular_list::begin() and circular_list::end()
@@ -25,11 +30,15 @@ class CircListIterator;
 
 
 template <typename T_>
-struct circular_list
+class circular_list
 {
-public:    
-    typedef CircListIterator<T_> iterator;
-//private:
+    // the iterator class must be allowed to use the attribute pointers!
+    friend class CircListIterator<T_>;
+    
+    // define a simple alias for the iterator.
+    typedef CircListIterator<T_> iterator;    
+    
+    // Attribute fields.
     
     struct circular_list<T_> *next;
     struct circular_list<T_> *prev;
@@ -42,11 +51,25 @@ public:
      * object. Since this field has only meaning with the elements of the list,
      * it can be kept null for the list's head, allowing some level of control.
      */
-    T_ *payload; // NULL for the list's head. The onwner object if an element of the list.
+    T_ *payload; // NULL for the list's head. The onwner object for an element of the list.
     
-    circular_list(T_ *listEltOf) {payload = listEltOf; next = this; prev = this;};
-    void init(){next = this; prev = this;};
+public:
+    // Constructors
+    circular_list(T_ *payld) {payload = payld; next = this; prev = this;};
 
+    // don't make the destructor virtual: this class is final and we want to
+    // spare space by not having any __vfptr pointer in the circular_list<T_>.
+    ~circular_list() {};
+    
+private:
+    // forbid any direct copy of a node:
+    circular_list(circular_list<T_> & ) = delete;
+    circular_list<T_>& operator= (circular_list<T_> &) = delete;
+        
+protected:
+    // the init function shall not be overloaded.
+    void init() {next = this; prev = this;};
+    
     /*
      * Insert the object between two known consecutive entries.
      * the object cannot be the list head else an assert is firing.
@@ -54,7 +77,7 @@ public:
      * the prev/next entries already!
      */
     void __insert(circular_list<T_> *prev,
-                  circular_list<T_> *next)
+             circular_list<T_> *next)
     {
         next->prev = this;
         this->next = next;
@@ -92,7 +115,7 @@ public:
             next->prev = last;
     }
 
-
+    
 public:
     /* test is the object is the head of the list. That function should rarely be used.*/
     bool is_head() {return payload == NULL;}
@@ -311,7 +334,7 @@ public:
      *
      */
     void 
-    truncate(circular_list<T_> *entry,
+    partition(circular_list<T_> *entry,
              circular_list<T_> *list );
 
     /**
@@ -469,7 +492,7 @@ rotate_left()
 
 template <typename T_> 
 void circular_list<T_>::
-truncate(circular_list<T_> *entry,
+partition(circular_list<T_> *entry,
          circular_list<T_> *list )
 {
         assert(payload == NULL);
@@ -494,12 +517,51 @@ truncate(circular_list<T_> *entry,
         }
 }
 
+/**
+ * The list's head is an instance of the circular_list_head<T_> class inherited 
+ * from circular_list<T_>
+ * One such instance always points to the first element of the list of to itself
+ * when the list is empty.
+ */
+template <typename T_>
+class circular_list_head : private circular_list<T_>
+{
+    public:
+        circular_list_head() : circular_list<T_>(nullptr) {};
+        
+        // forbid any global copy:
+        circular_list_head(circular_list_head<T_> & ) = delete;
+        circular_list_head<T_>& operator= (circular_list_head<T_> &) = delete;
+        
+        // don't make the destructor virtual: this class is final and we want to
+        // spare space by not having any __vfptr pointer in the circular_list<T_>.
+        ~circular_list_head() 
+        {
+            // check that the list is well empty before to be deleted.
+            // We don't delete the objects in the list because they could be linked in
+            // several different lists (have several attribute instance of circular_list<T_>)
+            // So all the linked objects have to be extracted from the list before to destroy it.
+             assert(this->empty());
+        }
+    protected:
+//        inline void 
+//        __for_each()
+//        {
+//            circular_list<T_> *p;
+//            for (p = this->next; p != this; p = p->next)
+//            {
+//            }
+//        }
+
+};
+
 
 // Test functions:
 extern int test1_circList(void);
 
 extern int test2_circList(void);
 
+#if 0
 /**
  * list_for_each	-	iterate over a list
  * @pos:	the &struct circular_list to use as a loop cursor.
@@ -536,7 +598,7 @@ extern int test2_circList(void);
 	for (pos = (head)->prev, n = pos->prev; \
 	     pos != (head); \
 	     pos = n, n = pos->prev)
-
+#endif
 
 
 /**
