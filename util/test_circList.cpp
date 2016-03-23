@@ -57,9 +57,9 @@ void FooMasterObject::disp_list()
 {
     circular_list<FooLinkableObject> *p;
     cout << "\n";
-    list_for_each(p, &the_list)
+    for (FooLinkableObject & obj : the_list)
     {
-        cout << p->object() << endl;
+        cout << obj << endl;
     }
 }
 /* Use of the circular_list's C-macro iterators (a la kernel) */
@@ -173,15 +173,14 @@ int test2_circList(void)
     {
         cout << obj << endl;        
     }
-#if 0
     cout << "\n test of the circular_list::trucation. move the master2 elements [0..3] to master\n ";
     circular_list<FooLinkableObject> *p3;
 
-    list_for_each(p, &master2.the_list)
+    for (FooLinkableObject & obj : master2.the_list)
     {
-        if (p->object()->identity == 3)
+        if (obj.identity == 3)
         {
-            p3 = p;
+            p3 = &obj.list_elt;
             break;
         }
     }
@@ -198,6 +197,5 @@ int test2_circList(void)
     
     assert((master2.the_list.first())->identity == 4);
     assert((master2.the_list.last())->identity == 9);
-#endif
 }
 #endif
