@@ -25,11 +25,13 @@ class CircListIterator;
 
 
 template <typename T_>
-struct circular_list
+class circular_list
 {
-public:    
-    typedef CircListIterator<T_> iterator;
-//private:
+    // the iterator class must be allowed to use the attribute pointers!
+    friend class CircListIterator<T_>;
+    
+    // define a simple alias for the iterator.
+private:
     
     struct circular_list<T_> *next;
     struct circular_list<T_> *prev;
@@ -44,9 +46,13 @@ public:
      */
     T_ *payload; // NULL for the list's head. The onwner object if an element of the list.
     
+public:    
+    typedef CircListIterator<T_> iterator;
     circular_list(T_ *listEltOf) {payload = listEltOf; next = this; prev = this;};
-    void init(){next = this; prev = this;};
 
+protected:
+    void __init(){next = this; prev = this;};  
+    
     /*
      * Insert the object between two known consecutive entries.
      * the object cannot be the list head else an assert is firing.
@@ -70,7 +76,7 @@ public:
      * the prev/next entries already!
      */
     inline static void 
-    __remove(circular_list<T_> * prev, 
+    __link(circular_list<T_> * prev, 
              circular_list<T_> * next)
     {
         next->prev = prev;
@@ -107,55 +113,6 @@ public:
      * an element to test whether it belongs to a list or not.
      */
     bool empty() { return next == this; }
-
-    /* get the pointer to the first element of the list without extracting it.*/
-    T_*  first()
-    {
-        assert(this->payload == NULL);// list head.
-        if (!empty())
-        {
-            return this->next->object();
-        }
-        else
-            return NULL;
-    }
-
-    /* get the pointer to the last element of the list without extracting it.*/
-    T_* 
-    last ()
-    {
-            assert(this->payload == NULL);// list head.
-            if (!empty())
-            {
-                return this->prev->object();
-            }
-            else
-                return NULL;
-    }
-
-    /**
-     * begin() standart function to start a list traversal (used with iterators)
-     * The this must be a list head.
-     * @return 
-     */
-    iterator begin()
-    {
-        assert(this->payload == NULL);// list head.
-        iterator it(this->next);
-        return it;
-    }
-
-    /**
-     * end() standart function to end a list traversal (used with iterators)
-     * The this must be a list head.
-     * @return the pointer when all the list has been scanned. It's the this.
-     */
-    iterator end ()
-    {
-            assert(this->payload == NULL);// list head.
-            iterator it(this);
-            return it;
-    }
     
     /**
      * insert_after - insert the object right after the indicated item
@@ -187,52 +144,12 @@ public:
     }
 
     /**
-     * push - push the indicated element to the head of the list
-     * @newElt: list head to add it after
-     *
-     * Insert a new entry at the first place
-     * This is good for implementing stacks.
-     */
-    void 
-    push(circular_list<T_> *newElt);
-
-    /**
-     * push_back - push the indicated element to the end of the list
-     * @newElt: list head 
-     *
-     * Insert a new entry at the tail of the list
-     * This is good for implementing queues.
-     */
-    void 
-    push_back(circular_list<T_> *newElt);
-    
-    /**
      * extract - deletes the object from its list and reinitialize it.
      * @this: a list element. Cannot be a list head.
      * @return the pointer to the queued object.
      */
     T_* extract();
   
-    /**
-     * pop - first prototype.
-     * Extract the first element from the list and returns its address.
-     * @this: a list head, else assert. If empty, NULL is returned.
-     * @return the pointer to the extracted element.
-     * This is good for implementing stacks.
-     */
-    circular_list<T_>* 
-    pop();
-    
-    /**
-     * pop_back - first prototype.
-     * Extract the first element from the list and returns its address.
-     * @this: a list head, else assert. If empty, NULL is returned.
-     * @return the pointer to the extracted element.
-     * This is good for implementing queues.
-     */
-    circular_list<T_>* 
-    pop_back();
-    
     /**
      * replace - replace old entry by new one
      * @old : the element to be replaced. Cannot be a list's head.
@@ -285,7 +202,197 @@ public:
    void 
    rotate_left();
 
+};
+ 
+template <typename T_>
+T_* circular_list<T_>::
+extract()
+{
+        assert(this->payload != NULL);// cannot be a list head.
+        if (!empty())
+        {
+            __link(this->prev, this->next);
+            this->__init();
+        }
+        return this->payload;
+}
+
+
+
+template <typename T_>
+void circular_list<T_>::
+replace(circular_list<T_> *elt)
+{
+        assert(this->payload != NULL);
+        assert(elt->payload != NULL);
+        this->next = elt->next;
+        this->next->prev = this;
+        this->prev = elt->prev;
+        this->prev->next = this;
+        elt->__init();
+}
+
+template <typename T_>
+void circular_list<T_>::
+replace_by(circular_list<T_> *newElt)
+{
+        // both elements shall have the same natur (list head or payload element.)
+        assert(this->payload == newElt->payload);
+        if (empty())
+            return;
+        newElt->next = this->next;
+        newElt->next->prev = newElt;
+        newElt->prev = this->prev;
+        newElt->prev->next = newElt;
+        this->__init();
+}
+
+template <typename T_>
+void circular_list<T_>::
+move_elt(circular_list<T_> *head)
+{
+       assert(head->payload == NULL);
+       assert(this->payload != NULL);
+       __link(this->prev, this->next);
+       head->push(this);
+}
+
+
+template <typename T_>
+void circular_list<T_>::
+move_elt_tail(circular_list<T_> *head)
+{
+        assert(head->payload == NULL);
+        assert(this->payload != NULL);
+        __link(this->prev, this->next);
+        head->push_back(this);
+}
+
+template <typename T_>
+void circular_list<T_>::
+rotate_left()
+{
+        assert(payload == NULL);
+        if (!empty()) {
+                next->move_elt_tail(this);
+        }
+}
+
+template <typename T_> 
+void circular_list<T_>::
+truncate(circular_list<T_> *entry,
+         circular_list<T_> *list )
+{
+        assert(payload == NULL);
+        assert(list->payload == NULL);
+        assert(entry->payload!=NULL);
+        if (empty())
+                return;
+        if (is_singular() &&
+            (this->next != entry && this != entry))
+            return;
+        if (entry == this)
+            list->__init();
+        else
+        {
+            circular_list<T_> *new_first = entry->next;
+            list->next = this->next;
+            list->next->prev = list;
+            list->prev = entry;
+            entry->next = list;
+            this->next = new_first;
+            new_first->prev = this;
+        }
+}
+
+/**
+ * The list's head is an instance of the circular_list_head<T_> class inherited 
+ * from circular_list<T_>
+ * One such instance always points to the first element of the list of to itself
+ * when the list is empty.
+ */
+template <typename T_>
+class circular_list_head : public circular_list<T_>
+{
+    public:
+        circular_list_head() : circular_list<T_>(nullptr) {};
+        
+        // forbid any global copy:
+        circular_list_head(circular_list_head<T_> & ) = delete;
+        circular_list_head<T_>& operator= (circular_list_head<T_> &) = delete;
+        
+        // don't make the destructor virtual: this class is final and we want to
+        // spare space by not having any __vfptr pointer in the circular_list<T_>.
+        ~circular_list_head() 
+        {
+            // check that the list is well empty before to be deleted.
+            // We don't delete the objects in the list because they could be linked in
+            // several different lists (have several attribute instance of circular_list<T_>)
+            // So all the linked objects have to be extracted from the list before to destroy it.
+             assert(this->empty());
+        }
+    protected:
+//        inline void 
+//        __for_each()
+//        {
+//            circular_list<T_> *p;
+//            for (p = this->next; p != this; p = p->next)
+//            {
+//            }
+//        }
+        
+public:
+/* get the pointer to the first element of the list without extracting it.*/
+    T_*  front()
+    {
+        assert(this->payload == NULL);// list head.
+        if (!this->empty())
+        {
+            return this->next->object();
+        }
+        else
+            return NULL;
+    }
+
+    /* get the pointer to the last element of the list without extracting it.*/
+    T_*  back ()
+    {
+            assert(this->payload == NULL);// list head.
+            if (!this->empty())
+            {
+                return this->prev->object();
+            }
+            else
+                return NULL;
+    }
+    inline T_*  first() {return this->front();};
+    inline T_*  last()  {return this->back();};
+
+        /**
+     * begin() standart function to start a list traversal (used with iterators)
+     * The this must be a list head.
+     * @return 
+     */
+    iterator begin()
+    {
+        assert(this->payload == NULL);// list head.
+        iterator it(this->next);
+        return it;
+    }
+
     /**
+     * end() standart function to end a list traversal (used with iterators)
+     * The this must be a list head.
+     * @return the pointer when all the list has been scanned. It's the this.
+     */
+    iterator end ()
+    {
+            assert(this->payload == NULL);// list head.
+            iterator it(this);
+            return it;
+    }
+
+   /**
      * is_singular - tests whether the list has just one entry.
      * @head: the list to test. Assert firing if not a list's head.
      */
@@ -296,6 +403,46 @@ public:
             return !empty() && (next == prev);
     }
 
+    /**
+     * push - push the indicated element to the head of the list
+     * @newElt: list head to add it after
+     *
+     * Insert a new entry at the first place
+     * This is good for implementing stacks.
+     */
+    void 
+    push(circular_list<T_> *newElt);
+
+    /**
+     * push_back - push the indicated element to the end of the list
+     * @newElt: list head 
+     *
+     * Insert a new entry at the tail of the list
+     * This is good for implementing queues.
+     */
+    void 
+    push_back(circular_list<T_> *newElt);
+    
+    /**
+     * pop - first prototype.
+     * Extract the first element from the list and returns its address.
+     * @this: a list head, else assert. If empty, NULL is returned.
+     * @return the pointer to the extracted element.
+     * This is good for implementing stacks.
+     */
+    circular_list<T_>* 
+    pop();
+    
+    /**
+     * pop_back - first prototype.
+     * Extract the first element from the list and returns its address.
+     * @this: a list head, else assert. If empty, NULL is returned.
+     * @return the pointer to the extracted element.
+     * This is good for implementing queues.
+     */
+    circular_list<T_>* 
+    pop_back();
+    
     /**
      * truncate - cut a list into two
      * @this: a list with entries. Assert firing if not a list's head.
@@ -341,12 +488,11 @@ public:
             if (!list->empty())
                     __concat(list, this->prev, this);
     }
-};
- 
 
+}; // circular_list_head
 
 template <typename T_>
-void circular_list<T_>::
+void circular_list_head<T_>::
 push(circular_list<T_> *newElt)
 {
     assert(this->payload == NULL);
@@ -355,7 +501,7 @@ push(circular_list<T_> *newElt)
 }
 
 template <typename T_>
-void circular_list<T_>::
+void circular_list_head<T_>::
 push_back(circular_list<T_> *newElt)
 {
     assert(this->payload == NULL);
@@ -363,137 +509,38 @@ push_back(circular_list<T_> *newElt)
     newElt->__insert(this->prev, this);
 }
 
-template <typename T_>
-T_* circular_list<T_>::
-extract()
-{
-        assert(this->payload != NULL);// cannot be a list head.
-        if (!empty())
-        {
-            __remove(this->prev, this->next);
-            this->init();
-        }
-        return this->payload;
-}
 
 template <typename T_>
-circular_list<T_>* circular_list<T_>::
+circular_list<T_>* circular_list_head<T_>::
 pop()
 {
-        assert(this->payload == NULL);// list head.
-        if (!empty())
-        {
-            circular_list<T_>*first = this->next;
-            __remove(this, first->next);
-            first->init();
-            return first;
-        }
-        else
-            return NULL;
+    assert(this->payload == NULL);// list head.
+    if (!empty())
+    {
+        circular_list<T_>*first = this->next;
+        __link(this, first->next);
+        first->__init();
+        return first;
+    }
+    else
+        return NULL;
 }
 
 template <typename T_>
-circular_list<T_>* circular_list<T_>::
+circular_list<T_>* circular_list_head<T_>::
 pop_back()
 {
         assert(this->payload == NULL);// list head.
         if (!empty())
         {
             circular_list<T_>*last = this->prev;
-            __remove(last->prev, this);
-            last->init();
+            __link(last->prev, this);
+            last->__init();
             return last;
         }
         else
             return NULL;
 }
-
-template <typename T_>
-void circular_list<T_>::
-replace(circular_list<T_> *elt)
-{
-        assert(this->payload != NULL);
-        assert(elt->payload != NULL);
-        this->next = elt->next;
-        this->next->prev = this;
-        this->prev = elt->prev;
-        this->prev->next = this;
-        elt->init();
-}
-
-template <typename T_>
-void circular_list<T_>::
-replace_by(circular_list<T_> *newElt)
-{
-        // both elements shall have the same natur (list head or payload element.)
-        assert(this->payload == newElt->payload);
-        if (empty())
-            return;
-        newElt->next = this->next;
-        newElt->next->prev = newElt;
-        newElt->prev = this->prev;
-        newElt->prev->next = newElt;
-        this->init();
-}
-
-template <typename T_>
-void circular_list<T_>::
-move_elt(circular_list<T_> *head)
-{
-       assert(head->payload == NULL);
-       assert(this->payload != NULL);
-       __remove(this->prev, this->next);
-       head->push(this);
-}
-
-
-template <typename T_>
-void circular_list<T_>::
-move_elt_tail(circular_list<T_> *head)
-{
-        assert(head->payload == NULL);
-        assert(this->payload != NULL);
-        __remove(this->prev, this->next);
-        head->push_back(this);
-}
-
-template <typename T_>
-void circular_list<T_>::
-rotate_left()
-{
-        assert(payload == NULL);
-        if (!empty()) {
-                next->move_elt_tail(this);
-        }
-}
-
-template <typename T_> 
-void circular_list<T_>::
-truncate(circular_list<T_> *entry,
-         circular_list<T_> *list )
-{
-        assert(payload == NULL);
-        assert(list->payload == NULL);
-        assert(entry->payload!=NULL);
-        if (empty())
-                return;
-        if (is_singular() &&
-            (this->next != entry && this != entry))
-            return;
-        if (entry == this)
-            list->init();
-        else
-        {
-            circular_list<T_> *new_first = entry->next;
-            list->next = this->next;
-            list->next->prev = list;
-            list->prev = entry;
-            entry->next = list;
-            this->next = new_first;
-            new_first->prev = this;
-        }
-}
-
 
 // Test functions:
 extern int test1_circList(void);
@@ -550,17 +597,30 @@ template <typename PAYLOAD>
 class CircListIterator : public std::iterator<std::input_iterator_tag, circular_list<PAYLOAD>>
 {
   circular_list<PAYLOAD>* p_elt;
+  circular_list<PAYLOAD>* p_prev;
+  circular_list<PAYLOAD>* p_next;
   
 public:
   
-  CircListIterator(circular_list<PAYLOAD>* x = nullptr) :p_elt(x) {}
-  CircListIterator(const CircListIterator& iter) : p_elt(iter.p_elt) {}
+  CircListIterator(circular_list<PAYLOAD>* x = nullptr) 
+                : p_elt(x), 
+                  p_prev(x!=nullptr ? x->prev : x), 
+                  p_next(x!=nullptr ? x->next : x) 
+                {}
+  CircListIterator(const CircListIterator& iter) = default;
+
   virtual ~CircListIterator() {};
+  
+  circular_list<PAYLOAD>* get() {return p_elt; };
   
   CircListIterator& operator++() 
   {
       
-      p_elt = p_elt->next;
+      //move to the next element without using the contents of p_elt which may have been destroyed.
+      p_prev = p_elt;
+      p_elt = p_next;
+      p_next = p_next->next;
+      
       return *this;
   }
   
