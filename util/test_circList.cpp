@@ -11,6 +11,7 @@
 
 #include "assert.h"
 using namespace std;
+using namespace CircList;
 
 class FooLinkableObject;
 
@@ -142,8 +143,8 @@ int test2_circList(void)
     while (!master.the_list.empty())
     {
         p = master.the_list.pop_back();
-        cout << "\ndeleting " << *(p->object());
-        delete p->object();
+        cout << "\ndeleting " << *(p->get_payload());
+        delete p->get_payload();
     }
     master.disp_list(); 
     

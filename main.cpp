@@ -21,6 +21,11 @@ using namespace std;
 using namespace HexagonMapNSpace;
 
 
+// Test functions:
+extern int test1_circList(void);
+
+extern int test2_circList(void);
+
 
 /*
  * 

@@ -12,6 +12,8 @@
 #include "assert.h"
 #include <iterator>
 
+namespace CircList {
+
 /*
  * Efficient doubly linked list implementation derivated from the kernel's list.h
  * the circular_list<T_> template 
@@ -22,7 +24,8 @@
 template <typename PAYLOAD>
 class CircListIterator;
 
-
+template <typename T_>
+class circular_list_head;
 
 template <typename T_>
 class circular_list
@@ -31,7 +34,7 @@ class circular_list
     friend class CircListIterator<T_>;
     
     // define a simple alias for the iterator.
-private:
+public:
     
     struct circular_list<T_> *next;
     struct circular_list<T_> *prev;
@@ -50,7 +53,10 @@ public:
     typedef CircListIterator<T_> iterator;
     circular_list(T_ *listEltOf) {payload = listEltOf; next = this; prev = this;};
 
-protected:
+//protected: this encapsulation by protect is (unfortunately) not possible due to
+// the restriction to this encapsulation type : "A protected member of a class Base can only 
+// be accessed... by the members ... of any class derived from Base, but only when operating 
+// on an object of a type that is derived from Base (including this)."
     void __init(){next = this; prev = this;};  
     
     /*
@@ -105,7 +111,7 @@ public:
     
     /* get the pointer to the payload object of that list element. 
        Be careful : when used on the list's head the returned value is NULL */
-    T_*  object() {return payload;}
+    T_*  get_payload() {return payload;}
     
     /**
      * empty - tests wether the object forms an empty list.
@@ -237,7 +243,7 @@ void circular_list<T_>::
 replace_by(circular_list<T_> *newElt)
 {
         // both elements shall have the same natur (list head or payload element.)
-        assert(this->payload == newElt->payload);
+        assert(this->payload == newElt->get_payload());
         if (empty())
             return;
         newElt->next = this->next;
@@ -278,33 +284,6 @@ rotate_left()
         }
 }
 
-template <typename T_> 
-void circular_list<T_>::
-truncate(circular_list<T_> *entry,
-         circular_list<T_> *list )
-{
-        assert(payload == NULL);
-        assert(list->payload == NULL);
-        assert(entry->payload!=NULL);
-        if (empty())
-                return;
-        if (is_singular() &&
-            (this->next != entry && this != entry))
-            return;
-        if (entry == this)
-            list->__init();
-        else
-        {
-            circular_list<T_> *new_first = entry->next;
-            list->next = this->next;
-            list->next->prev = list;
-            list->prev = entry;
-            entry->next = list;
-            this->next = new_first;
-            new_first->prev = this;
-        }
-}
-
 /**
  * The list's head is an instance of the circular_list_head<T_> class inherited 
  * from circular_list<T_>
@@ -315,6 +294,8 @@ template <typename T_>
 class circular_list_head : public circular_list<T_>
 {
     public:
+        typedef CircListIterator<T_> iterator;
+        
         circular_list_head() : circular_list<T_>(nullptr) {};
         
         // forbid any global copy:
@@ -348,7 +329,7 @@ public:
         assert(this->payload == NULL);// list head.
         if (!this->empty())
         {
-            return this->next->object();
+            return this->next->get_payload();
         }
         else
             return NULL;
@@ -360,7 +341,7 @@ public:
             assert(this->payload == NULL);// list head.
             if (!this->empty())
             {
-                return this->prev->object();
+                return this->prev->get_payload();
             }
             else
                 return NULL;
@@ -399,8 +380,8 @@ public:
     bool 
     is_singular()
     {
-            assert(payload == NULL);
-            return !empty() && (next == prev);
+            assert(this->payload == NULL);
+            return !this->empty() && (this->next == this->prev);
     }
 
     /**
@@ -470,7 +451,7 @@ public:
     append(const circular_list<T_> *list)
     {
             assert(list->payload == NULL);
-            assert(payload == NULL);
+            assert(this->payload == NULL);
             if (!list->empty())
                     __concat(list, this, this->next);
     }
@@ -484,7 +465,7 @@ public:
     append_back(circular_list<T_> *list)
     {
             assert(list->payload == NULL);
-            assert(payload == NULL);
+            assert(this->payload == NULL);
             if (!list->empty())
                     __concat(list, this->prev, this);
     }
@@ -496,8 +477,9 @@ void circular_list_head<T_>::
 push(circular_list<T_> *newElt)
 {
     assert(this->payload == NULL);
-    assert(newElt->payload != NULL);
-    newElt->__insert(this, next);
+    assert(newElt->get_payload() != NULL);
+    newElt->__insert(this, this->next);
+    
 }
 
 template <typename T_>
@@ -505,7 +487,7 @@ void circular_list_head<T_>::
 push_back(circular_list<T_> *newElt)
 {
     assert(this->payload == NULL);
-    assert(newElt->payload != NULL);
+    assert(newElt->get_payload() != NULL);
     newElt->__insert(this->prev, this);
 }
 
@@ -515,7 +497,7 @@ circular_list<T_>* circular_list_head<T_>::
 pop()
 {
     assert(this->payload == NULL);// list head.
-    if (!empty())
+    if (!this->empty())
     {
         circular_list<T_>*first = this->next;
         __link(this, first->next);
@@ -531,21 +513,43 @@ circular_list<T_>* circular_list_head<T_>::
 pop_back()
 {
         assert(this->payload == NULL);// list head.
-        if (!empty())
+        if (!this->empty())
         {
             circular_list<T_>*last = this->prev;
-            __link(last->prev, this);
+            this->__link(last->prev, this);
             last->__init();
             return last;
         }
         else
             return NULL;
 }
+template <typename T_> 
+void circular_list_head<T_>::
+truncate(circular_list<T_> *entry,
+         circular_list<T_> *list )
+{
+        assert(this->payload == NULL);
+        assert(list->payload == NULL);
+        assert(entry->payload!=NULL);
+        if (this->empty())
+                return;
+        if (is_singular() &&
+            (this->next != entry && this != entry))
+            return;
+        if (entry == this)
+            list->__init();
+        else
+        {
+            circular_list<T_> *new_first = entry->next;
+            list->next = this->next;
+            list->next->prev = list;
+            list->prev = entry;
+            entry->next = list;
+            this->next = new_first;
+            new_first->prev = this;
+        }
+}
 
-// Test functions:
-extern int test1_circList(void);
-
-extern int test2_circList(void);
 
 /**
  * list_for_each	-	iterate over a list
@@ -641,7 +645,7 @@ public:
   }
 };
 
-
+}; // namespace
 
 #endif /* DLINK_H */
 
