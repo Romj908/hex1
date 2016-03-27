@@ -35,6 +35,9 @@ class circular_list
     
     // define a simple alias for the iterator.
 public:
+    typedef CircListIterator<T_> iterator;    
+    
+    // Attribute fields.
     
     struct circular_list<T_> *next;
     struct circular_list<T_> *prev;
@@ -47,10 +50,8 @@ public:
      * object. Since this field has only meaning with the elements of the list,
      * it can be kept null for the list's head, allowing some level of control.
      */
-    T_ *payload; // NULL for the list's head. The onwner object if an element of the list.
+    T_ *payload; // NULL for the list's head. The onwner object for an element of the list.
     
-public:    
-    typedef CircListIterator<T_> iterator;
     circular_list(T_ *listEltOf) {payload = listEltOf; next = this; prev = this;};
 
 //protected: this encapsulation by protect is (unfortunately) not possible due to
@@ -119,6 +120,55 @@ public:
      * an element to test whether it belongs to a list or not.
      */
     bool empty() { return next == this; }
+
+    /* get the pointer to the first element of the list without extracting it.*/
+    T_*  first()
+    {
+        assert(this->payload == NULL);// list head.
+        if (!empty())
+        {
+            return this->next->object();
+        }
+        else
+            return NULL;
+    }
+
+    /* get the pointer to the last element of the list without extracting it.*/
+    T_* 
+    last ()
+    {
+            assert(this->payload == NULL);// list head.
+            if (!empty())
+            {
+                return this->prev->object();
+            }
+            else
+                return NULL;
+    }
+
+    /**
+     * begin() standart function to start a list traversal (used with iterators)
+     * The this must be a list head.
+     * @return 
+     */
+    iterator begin()
+    {
+        assert(this->payload == NULL);// list head.
+        iterator it(this->next);
+        return it;
+    }
+
+    /**
+     * end() standart function to end a list traversal (used with iterators)
+     * The this must be a list head.
+     * @return the pointer when all the list has been scanned. It's the this.
+     */
+    iterator end ()
+    {
+            assert(this->payload == NULL);// list head.
+            iterator it(this);
+            return it;
+    }
     
     /**
      * insert_after - insert the object right after the indicated item
@@ -523,6 +573,7 @@ pop_back()
         else
             return NULL;
 }
+
 template <typename T_> 
 void circular_list_head<T_>::
 truncate(circular_list<T_> *entry,
