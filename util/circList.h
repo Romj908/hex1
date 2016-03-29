@@ -21,14 +21,14 @@ namespace CircList {
  */
 
 template <typename T_>
-class circular_list
+class circular_list_elt
 {
 public:
     
     // Attribute fields.
     
-    struct circular_list<T_> *next;
-    struct circular_list<T_> *prev;
+    struct circular_list_elt<T_> *next;
+    struct circular_list_elt<T_> *prev;
     
     /* the offsetof() macro that is used in C to retrieve the address of the 
      * containing struct cannot be used easily in C++. The class cannot use
@@ -42,7 +42,7 @@ private:        // too dangerous to be made it public. It can never be modified.
     T_ *payload; // NULL for the list's head. The onwner object for an element of the list.
 
 public:    
-    circular_list(T_ *listEltOf) {payload = listEltOf; next = this; prev = this;};
+    circular_list_elt(T_ *listEltOf) {payload = listEltOf; next = this; prev = this;};
 
 //protected: this encapsulation by protect is (unfortunately) not possible due to
 // the restriction to this encapsulation type : "A protected member of a class Base can only 
@@ -55,8 +55,8 @@ public:
      * This is only for internal list manipulation where we know
      * the prev/next entries already!
      */
-    void __insert(circular_list<T_> *prev,
-                  circular_list<T_> *next)
+    void __insert(circular_list_elt<T_> *prev,
+                  circular_list_elt<T_> *next)
     {
         next->prev = this;
         this->next = next;
@@ -72,20 +72,20 @@ public:
      * the prev/next entries already!
      */
     inline static void 
-    __link(circular_list<T_> * prev, 
-             circular_list<T_> * next)
+    __link(circular_list_elt<T_> * prev, 
+             circular_list_elt<T_> * next)
     {
         next->prev = prev;
         prev->next = next;
     }
 
     inline static void 
-    __concat(const circular_list<T_> *list,
-                        circular_list<T_> *prev,
-                        circular_list<T_> *next)
+    __concat(const circular_list_elt<T_> *list,
+                        circular_list_elt<T_> *prev,
+                        circular_list_elt<T_> *next)
     {
-            circular_list<T_> *first = list->next;
-            circular_list<T_> *last = list->prev;
+            circular_list_elt<T_> *first = list->next;
+            circular_list_elt<T_> *last = list->prev;
 
             first->prev = prev;
             prev->next = first;
@@ -142,7 +142,7 @@ public:
      * Insert a new entry after the specified element.
      */
     void 
-    insert_after(circular_list<T_> *elt)
+    insert_after(circular_list_elt<T_> *elt)
     {
             assert(this->payload != NULL); // cannot be a list head.
             __insert(elt, elt->next);
@@ -156,7 +156,7 @@ public:
     * Insert a new entry before the specified item, so at the tail of the list for a list head.
     */
     void 
-    insert_before(circular_list<T_> *elt)
+    insert_before(circular_list_elt<T_> *elt)
     {
             assert(this->payload != NULL);// cannot be a list head.
             __insert(elt->prev, elt);
@@ -177,7 +177,7 @@ public:
      * If @old was empty, it will be overwritten.
      */
     void 
-    replace(circular_list<T_> *elt);
+    replace(circular_list_elt<T_> *elt);
 
     /**
      * replace_by - replace old entry by new one
@@ -185,7 +185,7 @@ public:
      * @newElt : the new element to insert.  Can be a list head or not.
      */
     void 
-    replace_by(circular_list<T_> *newElt);
+    replace_by(circular_list_elt<T_> *newElt);
 
     /**
      * move - remove the current element from its list and push it into another one
@@ -193,21 +193,21 @@ public:
      * @target: any element in a list. Not necerrary the head of a list
      */
     void 
-    move_elt(circular_list<T_> *target);
+    move_elt(circular_list_elt<T_> *target);
 
     /**
      * move_tail - delete from one list and add as another's tail
      * @target: any element in a list. Not necerrary the head of a list
      */
     void 
-    move_elt_tail(circular_list<T_> *target);
+    move_elt_tail(circular_list_elt<T_> *target);
     /**
      * is_last - tests whether the object is the last entry in list @head
      * @this: the entry to test
      * @head: the head of the list
      */
     bool 
-    is_last(const circular_list<T_> *head)
+    is_last(const circular_list_elt<T_> *head)
     {
             assert(head->payload == NULL);
             assert(this->payload != NULL);
@@ -224,7 +224,7 @@ public:
 };
  
 template <typename T_>
-T_* circular_list<T_>::
+T_* circular_list_elt<T_>::
 extract()
 {
         assert(this->payload != NULL);// cannot be a list head.
@@ -239,8 +239,8 @@ extract()
 
 
 template <typename T_>
-void circular_list<T_>::
-replace(circular_list<T_> *elt)
+void circular_list_elt<T_>::
+replace(circular_list_elt<T_> *elt)
 {
         assert(this->payload != NULL);
         assert(elt->payload != NULL);
@@ -252,8 +252,8 @@ replace(circular_list<T_> *elt)
 }
 
 template <typename T_>
-void circular_list<T_>::
-replace_by(circular_list<T_> *newElt)
+void circular_list_elt<T_>::
+replace_by(circular_list_elt<T_> *newElt)
 {
         // both elements shall have the same natur (list head or payload element.)
         assert(this->payload == newElt->get_payload());
@@ -267,8 +267,8 @@ replace_by(circular_list<T_> *newElt)
 }
 
 template <typename T_>
-void circular_list<T_>::
-move_elt(circular_list<T_> *target)
+void circular_list_elt<T_>::
+move_elt(circular_list_elt<T_> *target)
 {
        assert(this->payload != NULL);
        if (!empty())
@@ -282,8 +282,8 @@ move_elt(circular_list<T_> *target)
 
 
 template <typename T_>
-void circular_list<T_>::
-move_elt_tail(circular_list<T_> *target)
+void circular_list_elt<T_>::
+move_elt_tail(circular_list_elt<T_> *target)
 {
         assert(this->payload != NULL);
        if (!empty())
@@ -296,7 +296,7 @@ move_elt_tail(circular_list<T_> *target)
 }
 
 template <typename T_>
-void circular_list<T_>::
+void circular_list_elt<T_>::
 rotate_left()
 {
         assert(payload == NULL);
@@ -320,12 +320,12 @@ template <typename T_>
 class circular_list_head;
 
 template <typename T_>
-class circular_list_head : public circular_list<T_>
+class circular_list_head : public circular_list_elt<T_>
 {
     public:
         typedef CircListIterator<T_> iterator;
         
-        circular_list_head() : circular_list<T_>(nullptr) {};
+        circular_list_head() : circular_list_elt<T_>(nullptr) {};
         
         // forbid any global copy:
         circular_list_head(circular_list_head<T_> & ) = delete;
@@ -378,7 +378,7 @@ public:
     inline T_*  first() {return this->front();};
     inline T_*  last()  {return this->back();};
 
-        /**
+    /**
      * begin() standart function to start a list traversal (used with iterators)
      * The this must be a list head.
      * @return 
@@ -421,7 +421,7 @@ public:
      * This is good for implementing stacks.
      */
     void 
-    push(circular_list<T_> *newElt);
+    push(circular_list_elt<T_> *newElt);
 
     /**
      * push_back - push the indicated element to the end of the list
@@ -431,7 +431,7 @@ public:
      * This is good for implementing queues.
      */
     void 
-    push_back(circular_list<T_> *newElt);
+    push_back(circular_list_elt<T_> *newElt);
     
     /**
      * pop - first prototype.
@@ -440,7 +440,7 @@ public:
      * @return the pointer to the extracted element.
      * This is good for implementing stacks.
      */
-    circular_list<T_>* 
+    circular_list_elt<T_>* 
     pop();
     
     /**
@@ -450,7 +450,7 @@ public:
      * @return the pointer to the extracted element.
      * This is good for implementing queues.
      */
-    circular_list<T_>* 
+    circular_list_elt<T_>* 
     pop_back();
     
     /**
@@ -468,8 +468,8 @@ public:
      *
      */
     void 
-    truncate(circular_list<T_> *entry,
-             circular_list<T_> *list );
+    truncate(circular_list_elt<T_> *entry,
+             circular_list_elt<T_> *list );
 
     /**
      * append - insert the given list at the head of the current list.
@@ -477,7 +477,7 @@ public:
      * @list: the new list to add.  Must be a list head. The list head itself is not queued.
      */
     void 
-    append(const circular_list<T_> *list)
+    append(const circular_list_elt<T_> *list)
     {
             assert(list->get_payload() == NULL);
             assert(this->get_payload() == NULL);
@@ -491,7 +491,7 @@ public:
      * @list: the new list to add.
      */
     void  
-    append_back(circular_list<T_> *list)
+    append_back(circular_list_elt<T_> *list)
     {
             assert(list->get_payload() == NULL);
             assert(this->get_payload() == NULL);
@@ -503,7 +503,7 @@ public:
 
 template <typename T_>
 void circular_list_head<T_>::
-push(circular_list<T_> *newElt)
+push(circular_list_elt<T_> *newElt)
 {
     assert(this->get_payload() == NULL);
     assert(newElt->get_payload() != NULL);
@@ -513,7 +513,7 @@ push(circular_list<T_> *newElt)
 
 template <typename T_>
 void circular_list_head<T_>::
-push_back(circular_list<T_> *newElt)
+push_back(circular_list_elt<T_> *newElt)
 {
     assert(this->get_payload() == NULL);
     assert(newElt->get_payload() != NULL);
@@ -522,13 +522,13 @@ push_back(circular_list<T_> *newElt)
 
 
 template <typename T_>
-circular_list<T_>* circular_list_head<T_>::
+circular_list_elt<T_>* circular_list_head<T_>::
 pop()
 {
     assert(this->get_payload() == NULL);// list head.
     if (!this->empty())
     {
-        circular_list<T_>*first = this->next;
+        circular_list_elt<T_>*first = this->next;
         __link(this, first->next);
         first->__init();
         return first;
@@ -538,13 +538,13 @@ pop()
 }
 
 template <typename T_>
-circular_list<T_>* circular_list_head<T_>::
+circular_list_elt<T_>* circular_list_head<T_>::
 pop_back()
 {
         assert(this->get_payload() == NULL);// list head.
         if (!this->empty())
         {
-            circular_list<T_>*last = this->prev;
+            circular_list_elt<T_>*last = this->prev;
             this->__link(last->prev, this);
             last->__init();
             return last;
@@ -555,8 +555,8 @@ pop_back()
 
 template <typename T_> 
 void circular_list_head<T_>::
-truncate(circular_list<T_> *entry,
-         circular_list<T_> *list )
+truncate(circular_list_elt<T_> *entry,
+         circular_list_elt<T_> *list )
 {
         assert(this->get_payload() == NULL);
         assert(list->get_payload() == NULL);
@@ -570,7 +570,7 @@ truncate(circular_list<T_> *entry,
             list->__init();
         else
         {
-            circular_list<T_> *new_first = entry->next;
+            circular_list_elt<T_> *new_first = entry->next;
             list->next = this->next;
             list->next->prev = list;
             list->prev = entry;
@@ -637,14 +637,14 @@ truncate(circular_list<T_> *entry,
 
 
 template <typename PAYLOAD>
-class CircListIterator : public std::iterator<std::input_iterator_tag, circular_list<PAYLOAD>>
+class CircListIterator : public std::iterator<std::input_iterator_tag, circular_list_elt<PAYLOAD>>
 {
     public:
-  circular_list<PAYLOAD>* p_elt;
-  circular_list<PAYLOAD>* p_prev;
-  circular_list<PAYLOAD>* p_next;
+  circular_list_elt<PAYLOAD>* p_elt;
+  circular_list_elt<PAYLOAD>* p_prev;
+  circular_list_elt<PAYLOAD>* p_next;
   
-  void __relink(circular_list<PAYLOAD>* x)
+  void __relink(circular_list_elt<PAYLOAD>* x)
   {
       p_elt = x; 
       p_prev = x->prev; 
@@ -659,7 +659,7 @@ class CircListIterator : public std::iterator<std::input_iterator_tag, circular_
   
 public:
   
-  CircListIterator(circular_list<PAYLOAD>* x = nullptr) 
+  CircListIterator(circular_list_elt<PAYLOAD>* x = nullptr) 
                 : p_elt(x), 
                   p_prev(x!=nullptr ? x->prev : x), 
                   p_next(x!=nullptr ? x->next : x) 
@@ -668,7 +668,7 @@ public:
 
   virtual ~CircListIterator() {};
   
-  circular_list<PAYLOAD>* get() {return p_elt; };
+  circular_list_elt<PAYLOAD>* get() {return p_elt; };
   
   CircListIterator& operator++() 
   {
@@ -720,8 +720,8 @@ public:
     void swap (CircListIterator<PAYLOAD>& a, CircListIterator<PAYLOAD>& b)
        {
         // T c(std::move(a)); a=std::move(b); b=std::move(c);
-        CircList::circular_list<PAYLOAD>* elt_a = a.p_elt;
-        CircList::circular_list<PAYLOAD>* elt_b = b.p_elt;
+        CircList::circular_list_elt<PAYLOAD>* elt_a = a.p_elt;
+        CircList::circular_list_elt<PAYLOAD>* elt_b = b.p_elt;
         // recompute the links NOW. This is because external iterators used after 
         //a swap() could have uncorrect next/prev links.
         a.__safe();
@@ -752,8 +752,6 @@ public:
         a.__relink(elt_b);
         b.__relink(elt_a);
     }
-
-
     
 // Assuming that it's not necessary to redefine the array variant of the swap template.    
 //    template <class T, size_t N> 
@@ -764,44 +762,7 @@ public:
 
 };
 
- 
 }; // namespace
 
-//namespace std
-//{
-// template <typename PAYLOAD>
-// void std::swap (CircList::CircListIterator<PAYLOAD>& a, CircList::CircListIterator<PAYLOAD>& b)
-//    {
-//        // T c(std::move(a)); a=std::move(b); b=std::move(c);
-//        CircList::circular_list<PAYLOAD>* elt_a = a.p_elt;
-//        CircList::circular_list<PAYLOAD>* elt_b = b.p_elt;
-//
-//        std::cout << "\nswap()";
-//        elt_a->extract();
-//
-//        if (a.p_next == elt_b)
-//        {
-//            // a was right before b
-//            assert(b.p_prev == elt_a);
-//            elt_a->insert_after(elt_b);
-//        }
-//        else if (a.p_prev == elt_b)
-//        {
-//            // a was right after b
-//            assert(b.p_next == elt_a);
-//            elt_a->insert_before(elt_b);
-//        }
-//        else
-//        {
-//            // a and b were not adjacent
-//            elt_b->extract();
-//            elt_a->insert_after(b.p_next);
-//            elt_b->insert_after(a.p_next);
-//        }
-//        // update the both iterators.
-//        a.__relink(elt_b);
-//        b.__relink(elt_a);
-//    }
-//}
 #endif /* DLINK_H */
 

@@ -20,7 +20,7 @@ class FooLinkableObject
 public:
     int identity;
     
-    circular_list<FooLinkableObject> list_elt;
+    circular_list_elt<FooLinkableObject> list_elt;
     // constructors
     FooLinkableObject() : list_elt(this) {}
     FooLinkableObject(int id): identity(id), list_elt(this) {};
@@ -56,7 +56,7 @@ public:
 
 void FooMasterObject::disp_list()
 {
-    circular_list<FooLinkableObject> *p;
+    circular_list_elt<FooLinkableObject> *p;
     cout << "\n";
     for (FooLinkableObject & obj : the_list)
     {
@@ -127,7 +127,7 @@ int test2_circList(void)
 {
     FooMasterObject master;
     FooMasterObject master2;
-    circular_list<FooLinkableObject> *p;
+    circular_list_elt<FooLinkableObject> *p;
     cout << "\n test2_circList ";
     
     cout << "\n master list elts 9 to 0 ";
@@ -168,7 +168,7 @@ int test2_circList(void)
         cout << obj << endl;        
     }
     cout << "\n test of the circular_list::trucation. move the master2 elements [0..3] to master\n ";
-    circular_list<FooLinkableObject> *p3;
+    circular_list_elt<FooLinkableObject> *p3;
 
     for (FooLinkableObject & obj : master2.the_list)
     {
