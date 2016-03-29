@@ -63,10 +63,62 @@ void FooMasterObject::disp_list()
         cout << obj << endl;
     }
 }
-/* Use of the circular_list's C-macro iterators (a la kernel) */
+/* test of the iterators and of the std::swap() function */
 int test1_circList(void)
 {
-
+    FooMasterObject master;
+    cout << "\n master list elts 0 to 2 ";
+    for (int i=0; i<3; i++)
+    {
+        FooLinkableObject *obj = new FooLinkableObject(i);
+        master.the_list.push_back( &(obj->list_elt) ); 
+    }
+    master.disp_list(); 
+    CircListIterator<FooLinkableObject> it_beg(master.the_list.begin());
+    CircListIterator<FooLinkableObject> it_end(master.the_list.end());
+    it_end--;
+    CircListIterator<FooLinkableObject> it_middle = it_beg;
+    it_middle++;
+    
+    swap(it_beg, it_end);
+    master.disp_list(); 
+    
+    swap(it_beg, it_middle);
+    master.disp_list(); 
+    
+    swap(it_beg, it_middle);
+    master.disp_list(); 
+    
+    swap(it_middle, it_end);
+    master.disp_list(); 
+    
+    swap(it_middle, it_end);
+    master.disp_list(); 
+    
+    swap(it_end, it_middle);
+    master.disp_list(); 
+    
+    swap(it_end, it_middle);
+    master.disp_list(); 
+    
+    
+    cout << "\n remove the middle elt and swap elts 1 and 0 ";
+    it_middle.get()->extract();
+    delete it_middle.get()->get_payload();
+    
+    swap(it_beg, it_end);
+    master.disp_list(); 
+    
+    swap(it_beg, it_end);
+    master.disp_list(); 
+    
+    for (FooLinkableObject & obj : master.the_list)
+    {
+        cout << "\ndeleting " << obj;
+        obj.list_elt.extract();
+        delete &obj;
+    }
+    return 0;
 }
 
 #if 1
@@ -156,6 +208,6 @@ int test2_circList(void)
     }
     master2.disp_list(); 
     
-
+    return 0;
 }
 #endif

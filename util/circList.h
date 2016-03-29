@@ -11,7 +11,8 @@
 #include <stddef.h>
 #include "assert.h"
 #include <iterator>
-
+#include <utility>
+#include <iostream>
 namespace CircList {
 
 /*
@@ -19,23 +20,10 @@ namespace CircList {
  * the circular_list<T_> template 
  */
 
-// forward declaration of the iterator class because it is required by the 
-// definition of circular_list::begin() and circular_list::end()
-template <typename PAYLOAD>
-class CircListIterator;
-
-template <typename T_>
-class circular_list_head;
-
 template <typename T_>
 class circular_list
 {
-    // the iterator class must be allowed to use the attribute pointers!
-    friend class CircListIterator<T_>;
-    
-    // define a simple alias for the iterator.
 public:
-    typedef CircListIterator<T_> iterator;    
     
     // Attribute fields.
     
@@ -50,8 +38,10 @@ public:
      * object. Since this field has only meaning with the elements of the list,
      * it can be kept null for the list's head, allowing some level of control.
      */
+private:        // too dangerous to be made it public. It can never be modified.
     T_ *payload; // NULL for the list's head. The onwner object for an element of the list.
-    
+
+public:    
     circular_list(T_ *listEltOf) {payload = listEltOf; next = this; prev = this;};
 
 //protected: this encapsulation by protect is (unfortunately) not possible due to
@@ -145,30 +135,6 @@ public:
                 return NULL;
     }
 
-    /**
-     * begin() standart function to start a list traversal (used with iterators)
-     * The this must be a list head.
-     * @return 
-     */
-    iterator begin()
-    {
-        assert(this->payload == NULL);// list head.
-        iterator it(this->next);
-        return it;
-    }
-
-    /**
-     * end() standart function to end a list traversal (used with iterators)
-     * The this must be a list head.
-     * @return the pointer when all the list has been scanned. It's the this.
-     */
-    iterator end ()
-    {
-            assert(this->payload == NULL);// list head.
-            iterator it(this);
-            return it;
-    }
-    
     /**
      * insert_after - insert the object right after the indicated item
      * @this: new entry to be added. must be list element (not a list head).
@@ -345,6 +311,14 @@ rotate_left()
  * One such instance always points to the first element of the list of to itself
  * when the list is empty.
  */
+// forward declaration of the iterator class because it is required by the 
+// definition of circular_list::begin() and circular_list::end()
+template <typename PAYLOAD>
+class CircListIterator;
+
+template <typename T_>
+class circular_list_head;
+
 template <typename T_>
 class circular_list_head : public circular_list<T_>
 {
@@ -381,7 +355,7 @@ public:
 /* get the pointer to the first element of the list without extracting it.*/
     T_*  front()
     {
-        assert(this->payload == NULL);// list head.
+        assert(this->get_payload() == NULL);// list head.
         if (!this->empty())
         {
             return this->next->get_payload();
@@ -393,7 +367,7 @@ public:
     /* get the pointer to the last element of the list without extracting it.*/
     T_*  back ()
     {
-            assert(this->payload == NULL);// list head.
+            assert(this->get_payload() == NULL);// list head.
             if (!this->empty())
             {
                 return this->prev->get_payload();
@@ -411,7 +385,7 @@ public:
      */
     iterator begin()
     {
-        assert(this->payload == NULL);// list head.
+        assert(this->get_payload() == NULL);// list head.
         iterator it(this->next);
         return it;
     }
@@ -423,7 +397,7 @@ public:
      */
     iterator end ()
     {
-            assert(this->payload == NULL);// list head.
+            assert(this->get_payload() == NULL);// list head.
             iterator it(this);
             return it;
     }
@@ -435,7 +409,7 @@ public:
     bool 
     is_singular()
     {
-            assert(this->payload == NULL);
+            assert(this->get_payload() == NULL);
             return !this->empty() && (this->next == this->prev);
     }
 
@@ -505,8 +479,8 @@ public:
     void 
     append(const circular_list<T_> *list)
     {
-            assert(list->payload == NULL);
-            assert(this->payload == NULL);
+            assert(list->get_payload() == NULL);
+            assert(this->get_payload() == NULL);
             if (!list->empty())
                     __concat(list, this, this->next);
     }
@@ -519,8 +493,8 @@ public:
     void  
     append_back(circular_list<T_> *list)
     {
-            assert(list->payload == NULL);
-            assert(this->payload == NULL);
+            assert(list->get_payload() == NULL);
+            assert(this->get_payload() == NULL);
             if (!list->empty())
                     __concat(list, this->prev, this);
     }
@@ -531,7 +505,7 @@ template <typename T_>
 void circular_list_head<T_>::
 push(circular_list<T_> *newElt)
 {
-    assert(this->payload == NULL);
+    assert(this->get_payload() == NULL);
     assert(newElt->get_payload() != NULL);
     newElt->__insert(this, this->next);
     
@@ -541,7 +515,7 @@ template <typename T_>
 void circular_list_head<T_>::
 push_back(circular_list<T_> *newElt)
 {
-    assert(this->payload == NULL);
+    assert(this->get_payload() == NULL);
     assert(newElt->get_payload() != NULL);
     newElt->__insert(this->prev, this);
 }
@@ -551,7 +525,7 @@ template <typename T_>
 circular_list<T_>* circular_list_head<T_>::
 pop()
 {
-    assert(this->payload == NULL);// list head.
+    assert(this->get_payload() == NULL);// list head.
     if (!this->empty())
     {
         circular_list<T_>*first = this->next;
@@ -567,7 +541,7 @@ template <typename T_>
 circular_list<T_>* circular_list_head<T_>::
 pop_back()
 {
-        assert(this->payload == NULL);// list head.
+        assert(this->get_payload() == NULL);// list head.
         if (!this->empty())
         {
             circular_list<T_>*last = this->prev;
@@ -584,9 +558,9 @@ void circular_list_head<T_>::
 truncate(circular_list<T_> *entry,
          circular_list<T_> *list )
 {
-        assert(this->payload == NULL);
-        assert(list->payload == NULL);
-        assert(entry->payload!=NULL);
+        assert(this->get_payload() == NULL);
+        assert(list->get_payload() == NULL);
+        assert(entry->get_payload()!=NULL);
         if (this->empty())
                 return;
         if (is_singular() &&
@@ -647,18 +621,41 @@ truncate(circular_list<T_> *entry,
 
 
 /**
- * Definition of the circular_list's iterator, which would allow to make its
- * attributes next, prev and payload private (they are public only to allow
- * the use of the iterator macro a la C mode (list_for_each(), ...)
+ * Definition of the circular_list's iterator
  * Our iterator's value-type must be of course the same "PAYLOAD" class than in
  * circular_list<PAYLOAD> because it describes the type of the payload objects.
  */
+
+//// Forward declarations to allow friend templates.
+//// refer to : https://en.wikibooks.org/wiki/More_C%2B%2B_Idioms/Making_New_Friends
+//
+//template<class T> 
+//class CircListIterator;
+//
+//template<class T> 
+//void std::swap (CircListIterator<T>& a, CircListIterator<T>& b);
+
+
 template <typename PAYLOAD>
 class CircListIterator : public std::iterator<std::input_iterator_tag, circular_list<PAYLOAD>>
 {
+    public:
   circular_list<PAYLOAD>* p_elt;
   circular_list<PAYLOAD>* p_prev;
   circular_list<PAYLOAD>* p_next;
+  
+  void __relink(circular_list<PAYLOAD>* x)
+  {
+      p_elt = x; 
+      p_prev = x->prev; 
+      p_next = x->next;
+  }
+  
+  void __safe()
+  {
+      p_prev = p_elt->prev; 
+      p_next = p_elt->next;
+  }
   
 public:
   
@@ -691,17 +688,120 @@ public:
       return tmp;
   }
   
+  CircListIterator& operator--() 
+  {
+        //move to the previous element without using the contents of p_elt which may have been destroyed.
+        p_next = p_elt; 
+        p_elt = p_prev; 
+        p_prev = p_prev->prev;
+      
+        return *this;
+  }
+  
+  CircListIterator operator--(int) 
+  {
+      CircListIterator tmp(*this); 
+      operator--(); 
+      return tmp;
+  }
+  
+  
   bool operator==(const CircListIterator& iter) {return p_elt==iter.p_elt;}
   bool operator!=(const CircListIterator& iter) {return p_elt!=iter.p_elt;}
   
   PAYLOAD& operator*() 
   {
-      assert(p_elt->payload);
-      return *(p_elt->payload);
+      assert(p_elt->get_payload());
+      return *(p_elt->get_payload());
   }
+  
+    // template swap() function required for complete support of the iterator.
+    friend
+    void swap (CircListIterator<PAYLOAD>& a, CircListIterator<PAYLOAD>& b)
+       {
+        // T c(std::move(a)); a=std::move(b); b=std::move(c);
+        CircList::circular_list<PAYLOAD>* elt_a = a.p_elt;
+        CircList::circular_list<PAYLOAD>* elt_b = b.p_elt;
+        // recompute the links NOW. This is because external iterators used after 
+        //a swap() could have uncorrect next/prev links.
+        a.__safe();
+        b.__safe();
+        std::cout << "\nswap() of " << elt_a->get_payload() << " with " << elt_b->get_payload();
+        elt_a->extract();
+
+        if (a.p_next == elt_b)
+        {
+            // a was right before b
+            assert(b.p_prev == elt_a);
+            elt_a->insert_after(elt_b);
+        }
+        else if (a.p_prev == elt_b)
+        {
+            // a was right after b
+            assert(b.p_next == elt_a);
+            elt_a->insert_before(elt_b);
+        }
+        else
+        {
+            // a and b were not adjacent
+            elt_b->extract();
+            elt_a->insert_after(b.p_prev);
+            elt_b->insert_after(a.p_prev);
+        }
+        // update both iterators.
+        a.__relink(elt_b);
+        b.__relink(elt_a);
+    }
+
+
+    
+// Assuming that it's not necessary to redefine the array variant of the swap template.    
+//    template <class T, size_t N> 
+//    void swap (T &a[N], T &b[N])
+//    {
+//      for (size_t i = 0; i<N; ++i) swap (a[i],b[i]);
+//    }
+
 };
 
+ 
 }; // namespace
 
+//namespace std
+//{
+// template <typename PAYLOAD>
+// void std::swap (CircList::CircListIterator<PAYLOAD>& a, CircList::CircListIterator<PAYLOAD>& b)
+//    {
+//        // T c(std::move(a)); a=std::move(b); b=std::move(c);
+//        CircList::circular_list<PAYLOAD>* elt_a = a.p_elt;
+//        CircList::circular_list<PAYLOAD>* elt_b = b.p_elt;
+//
+//        std::cout << "\nswap()";
+//        elt_a->extract();
+//
+//        if (a.p_next == elt_b)
+//        {
+//            // a was right before b
+//            assert(b.p_prev == elt_a);
+//            elt_a->insert_after(elt_b);
+//        }
+//        else if (a.p_prev == elt_b)
+//        {
+//            // a was right after b
+//            assert(b.p_next == elt_a);
+//            elt_a->insert_before(elt_b);
+//        }
+//        else
+//        {
+//            // a and b were not adjacent
+//            elt_b->extract();
+//            elt_a->insert_after(b.p_next);
+//            elt_b->insert_after(a.p_next);
+//        }
+//        // update the both iterators.
+//        a.__relink(elt_b);
+//        b.__relink(elt_a);
+//    }
+//}
 #endif /* DLINK_H */
 
