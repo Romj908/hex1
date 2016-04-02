@@ -192,6 +192,18 @@ int test2_circList(void)
     assert((master2.the_list.first())->identity == 4);
     assert((master2.the_list.last())->identity == 9);
     
+    CircListIterator<FooLinkableObject> rev_it = master.the_list.rbegin();
+    CircListIterator<FooLinkableObject> end_it = master.the_list.rend();
+    
+    
+    cout << "\n master in reverse order:\n ";
+    while (rev_it != end_it)
+    {
+        cout << endl << *rev_it--;
+    }
+    
+    cout << "\n releasing all the linked objects :\n ";
+    
     while (!master.the_list.empty())
     {
         p = master.the_list.pop_back();

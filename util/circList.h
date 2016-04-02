@@ -101,7 +101,7 @@ public:
     
     /* get the pointer to the payload object of that list element. 
        Be careful : when used on the list's head the returned value is NULL */
-    T_*  get_payload() {return payload;}
+    T_*  get_payload() const {return payload;}
     
     /**
      * empty - tests wether the object forms an empty list.
@@ -324,6 +324,7 @@ class circular_list_head : public circular_list_elt<T_>
 {
     public:
         typedef CircListIterator<T_> iterator;
+        typedef const CircListIterator<T_> const_iterator;
         
         circular_list_head() : circular_list_elt<T_>(nullptr) {};
         
@@ -390,6 +391,32 @@ public:
         return it;
     }
 
+    const_iterator cbegin() const
+    {
+        assert(this->get_payload() == NULL);// list head.
+        const_iterator it(this->next);
+        return it;
+    }
+    
+   /**
+     * rbegin() standart function to start a list traversal in reverse order
+     * The this must be a list head.
+     * @return 
+     */
+    iterator rbegin()
+    {
+        assert(this->get_payload() == NULL);// list head.
+        iterator it(this->prev);
+        return it;
+    }
+
+    const_iterator crbegin() const
+    {
+        assert(this->get_payload() == NULL);// list head.
+        const_iterator it(this->prev);
+        return it;
+    }
+
     /**
      * end() standart function to end a list traversal (used with iterators)
      * The this must be a list head.
@@ -402,12 +429,37 @@ public:
             return it;
     }
 
+    /**
+     * end() standart function to end a list traversal (used with iterators)
+     * The this must be a list head.
+     * @return the pointer when all the list has been scanned in reverse order. 
+     * It's the this.
+     */
+    iterator rend ()
+    {
+        return end();
+    }
+
+    const_iterator cend () const
+    {
+            assert(this->get_payload() == NULL);// list head.
+            const_iterator it(this);
+            return it;
+    }
+    
+    const_iterator crend () const
+    {
+            assert(this->get_payload() == NULL);// list head.
+            const_iterator it(this);
+            return it;
+    }
+    
    /**
      * is_singular - tests whether the list has just one entry.
      * @head: the list to test. Assert firing if not a list's head.
      */
     bool 
-    is_singular()
+    is_singular() 
     {
             assert(this->get_payload() == NULL);
             return !this->empty() && (this->next == this->prev);
@@ -637,7 +689,8 @@ truncate(circular_list_elt<T_> *entry,
 
 
 template <typename PAYLOAD>
-class CircListIterator : public std::iterator<std::input_iterator_tag, circular_list_elt<PAYLOAD>>
+class CircListIterator : public std::iterator<std::bidirectional_iterator_tag, 
+                                                circular_list_elt<PAYLOAD>>
 {
     public:
   circular_list_elt<PAYLOAD>* p_elt;
