@@ -18,7 +18,6 @@
 #include "util/circList.h"
 
 using namespace std;
-using namespace HexagonMapNSpace;
 
 
 // Test functions:
@@ -26,16 +25,37 @@ extern int test1_circList(void);
 
 extern int test2_circList(void);
 
+extern void server_main();
+extern void client_main();
 
 /*
  * 
  */
 int main(int argc, char** argv) 
 {
-    
-    //test1_Hexmap_hexDist();
-    test1_circList();
-    test2_circList();
+    if (argc == 2)
+    {
+        string cmd(argv[1]);
+        if (cmd.compare("client")==0)
+        {
+            client_main();
+        }
+        else if (cmd.compare("server")==0)
+        {
+            server_main();
+        }
+        else if (cmd.compare("tests")==0)
+        {
+            using namespace HexagonMapNSpace;
+            test1_Hexmap_hexDist();
+            test1_circList();
+            test2_circList();
+        }
+    }
+    else
+    {
+        std::cout << "\nERROR! usage : hex1 tests|client|master";
+    }
     return 0;
 }
 
