@@ -6,10 +6,17 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <map>
+#include <cstring> // memset()
+#include <iostream>
+
+#include <boost/thread/thread.hpp>
 
 #include "hex1Protocol.h"
 
 #include "gameServer.h"
+
+
 
 GameServer *gameServer = nullptr;
 
@@ -66,7 +73,7 @@ void GameServer::open_new_client_connection()
 }
 
 
-void GameServer::wait_new_connection() const
+ClientCnxPtr GameServer::wait_new_connection() const
 {
     // poll on the main socket for new clients or for messages from registered clients.
     int clientSock;
@@ -74,12 +81,17 @@ void GameServer::wait_new_connection() const
     socklen_t addrLenght;
     
     addrLenght = sizeof(clientAddr);
-    clientSock = accept(server_socket, &clientAddr, &addrLenght);
+    clientSock = accept(server_socket, 
+            reinterpret_cast<struct sockaddr *>(&clientAddr), 
+            &addrLenght);
+    
     if (clientSock < 0)
     {
         throw("Server's accept() error");
     }
     
+    ClientCnxPtr new_client(new ClientContext(&clientAddr, clientSock));
+    return new_client;
 }
 
 
@@ -90,21 +102,37 @@ void GameServer::server_loop()
     {
         try
         {
-            // receive one message from any client
-            wait_new_connection();
+            // Wait a new TCP connection from any client and create a corresponding object.
+            ClientCnxPtr new_client = wait_new_connection();
+            
             // is it a message from a new client or from a already registerd one ?
-            if (0)
+            ContextIterator found_item;    // map::find() returns an iterator on the found item.
+            found_item = clientsContexts.find( new_client->get_in_addr_t());
+            
+            if (found_item != clientsContexts.end())
             {
-                // message from a know client. A connection already exist for it.
-                handle_client_message();
+                // message from a know client (same IP address). A connection already exist for it.
+                // reject that new request and let the existing run. Perhaps the player launched the client application twice.
+                // Had the distant experienced a crash, or some problems, just wait until a TCP alarm on the already exisiting 
+                // connection.
+                new_client->deny_connection();
             }
             else
             {
-                // it's a MSG1
-                open_new_client_connection();
+                // normal case - no matching context => it's well a new session
+                // insert that context in the list of clients having an opened connections.
+                clientsContexts.emplace( std::make_pair(new_client->get_in_addr_t(), new_client) );
+                
+                new_client->wait_authentication();
             }
+            // in both cases start a dedicated thread
+            new_client
         }
         // handle typical socket exceptions (broken pipe,...))
+        catch(boost::thread_resource_error e)
+        {
+            std::cout << "\nboost::thread_resource_error " << e.what();
+        }
         catch(...)
         {
             

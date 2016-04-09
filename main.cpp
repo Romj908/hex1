@@ -26,7 +26,7 @@ extern int test1_circList(void);
 extern int test2_circList(void);
 
 #include "gameServer.h"
-extern void client_main();
+#include "gameClient.h"
 
 /*
  * 
@@ -38,7 +38,7 @@ int main(int argc, char** argv)
         string cmd(argv[1]);
         if (cmd.compare("client")==0)
         {
-            client_main();
+            client_main(argv[2]);
         }
         else if (cmd.compare("server")==0)
         {

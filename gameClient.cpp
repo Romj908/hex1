@@ -9,13 +9,23 @@
 #include "hex1Protocol.h"
 
 #include "gameServer.h"
+#include "gameClient.h"
 
 
 
 
 void client_loop()
 {
-        // initialize the server's main objects.
+        // initialize the client's main objects.
+    ;   
+
+}
+
+
+void client_main(const char *ip_interface_name)
+{
+        // initialize the client's main objects.
+    //...
     struct sockaddr_in serverAddrBuffer;
     
     display_network_addresses();
@@ -24,18 +34,8 @@ void client_loop()
     if (get_ipv4_address(&serverAddrBuffer, const_cast<char *>(ip_interface_name)) <0
         && get_ipv4_address(&serverAddrBuffer,  const_cast<char *>("lo")) < 0)
     {
-        exit(EXIT_FAILURE);
+        throw "no Network interface" ;
     }
-    ;   
-
-}
-
-
-void client_main()
-{
-        // initialize the client's main objects.
-    //...
-    ;
     
     // 
     try

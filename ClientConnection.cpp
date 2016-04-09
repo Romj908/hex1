@@ -10,20 +10,36 @@
  * 
  * Created on April 8, 2016, 12:32 PM
  */
-
+#include "assert.h"
 #include "ClientConnection.h"
 #include "util/ipUtilities.h"
 
 ClientContext::
 ClientContext(const struct sockaddr_in *clientAddr, 
-                 const unsigned short clientPort)
-: ipAddr(*clientAddr), socket(clientPort)
+                 int clientSocket)
+: ipAddr(*clientAddr), socket(clientSocket), state(State::EMPTY)
 {
 }
 
-ClientContext::ClientConnection(const ClientContext& orig) {
+ClientContext::~ClientContext() 
+{
 }
 
-ClientContext::~ClientContext() {
+void ClientContext::operator()() 
+{
+    
+}
+
+
+void ClientContext::deny_connection() 
+{
+    assert(state == State::EMPTY);
+    state = State::REJECTING;
+}
+
+void ClientContext::wait_authentication() 
+{
+    assert(state == State::EMPTY);
+    state = State::REGISTERING;
 }
 

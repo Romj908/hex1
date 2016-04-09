@@ -15,7 +15,7 @@
 #define GAMESERVER_H
 
 #include <memory>
-
+#include <map>
 #include "util/ipUtilities.h"
 
 #include "ClientConnection.h"
@@ -23,12 +23,19 @@
 
 class GameServer
 {
-    unsigned short      port;
-    struct sockaddr_in  ipAddr;
-    int server_socket;
+public:
+    typedef std::list<ClientCnxPtr>                         ContextList;
+    typedef std::map<in_addr_t,ClientCnxPtr>::iterator      ContextIterator;
+    
+private:
+    unsigned short                              port;
+    struct sockaddr_in                          ipAddr;
+    int                                         server_socket;
+    std::map<in_addr_t,ClientCnxPtr>            clientsContexts;
+    ContextList                                 rejectedConnections;
     
     bool existing_connection() const;
-    void wait_new_connection() const;
+    ClientCnxPtr wait_new_connection() const;
     void open_new_client_connection();
     void handle_client_message();
     void server_loop();
