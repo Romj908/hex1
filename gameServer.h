@@ -36,7 +36,7 @@ private:
     
     bool existing_connection() const;
     ClientCnxPtr wait_new_connection() const;
-    void open_new_client_connection();
+    void handle_new_client_connection(ClientCnxPtr new_client);
     void handle_client_message();
     void server_loop();
     
@@ -58,8 +58,6 @@ public:
     
     unsigned short 
     get_ipPort() const { return port;};
-    
-    
     
 };
 

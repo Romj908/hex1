@@ -63,12 +63,36 @@ bool GameServer::existing_connection() const
     return false;
 }
 
-void GameServer::open_new_client_connection()
+// registrate a the new remote client 
+// create a new thread dedicated to that client. 
+
+void GameServer::handle_new_client_connection(ClientCnxPtr new_client)
 {
-    // registrate a the new remote client 
-    
-    // create a new threat dedicated to that client. 
-    // It will be waiting for input from the main socket through a wait queue 
+             // is it a message from a new client or from a already registerd one ?
+            ContextIterator found_item;    // map::find() returns an iterator on the found item.
+            found_item = clientsContexts.find( new_client->get_in_addr_t());
+            
+            if (found_item != clientsContexts.end())
+            {
+                // message from a know client (same IP address). A connection already exist for it.
+                // reject that new request and let the existing run. Perhaps the player launched the client application twice.
+                // Had the distant experienced a crash, or some problems, just wait until a TCP alarm on the already exisiting 
+                // connection.
+                rejectedConnections.push_back(new_client); // queue all rejected connections in their list
+                new_client->deny_connection();
+            }
+            else
+            {
+                // normal case - no matching context => it's well a new session
+                // insert that context in a map container of the clients having an opened connections.
+                clientsContexts.emplace( std::make_pair(new_client->get_in_addr_t(), new_client) );
+                
+                new_client->wait_authentication();
+            }
+            // in both cases start a dedicated thread to handle the socket and that session.
+            // http://www.boost.org/doc/libs/1_60_0/doc/html/thread/thread_management.html#thread.thread_management.tutorial
+            // the callable object is the newly created client context.
+            boost::thread the_thread(boost::ref(*new_client)); // The thread's entry point is the callable ClientContext class.
     
 }
 
@@ -79,11 +103,10 @@ ClientCnxPtr GameServer::wait_new_connection() const
     int clientSock;
     struct sockaddr_in clientAddr;
     socklen_t addrLenght;
-    
     addrLenght = sizeof(clientAddr);
     clientSock = accept(server_socket, 
-            reinterpret_cast<struct sockaddr *>(&clientAddr), 
-            &addrLenght);
+                        reinterpret_cast<struct sockaddr *>(&clientAddr), 
+                        &addrLenght);
     
     if (clientSock < 0)
     {
@@ -103,38 +126,20 @@ void GameServer::server_loop()
         try
         {
             // Wait a new TCP connection from any client and create a corresponding object.
+            std::cout<< "\nserver_loop iteration 1:";
             ClientCnxPtr new_client = wait_new_connection();
-            
-            // is it a message from a new client or from a already registerd one ?
-            ContextIterator found_item;    // map::find() returns an iterator on the found item.
-            found_item = clientsContexts.find( new_client->get_in_addr_t());
-            
-            if (found_item != clientsContexts.end())
-            {
-                // message from a know client (same IP address). A connection already exist for it.
-                // reject that new request and let the existing run. Perhaps the player launched the client application twice.
-                // Had the distant experienced a crash, or some problems, just wait until a TCP alarm on the already exisiting 
-                // connection.
-                new_client->deny_connection();
-            }
-            else
-            {
-                // normal case - no matching context => it's well a new session
-                // insert that context in the list of clients having an opened connections.
-                clientsContexts.emplace( std::make_pair(new_client->get_in_addr_t(), new_client) );
-                
-                new_client->wait_authentication();
-            }
-            // in both cases start a dedicated thread
-            new_client
+            std::cout<< "\n server_loop iteration 2:";
+            handle_new_client_connection(new_client);
         }
-        // handle typical socket exceptions (broken pipe,...))
+        // handle socket exceptions.
         catch(boost::thread_resource_error e)
         {
             std::cout << "\nboost::thread_resource_error " << e.what();
         }
+        // handle typical socket exceptions (broken pipe,...))
         catch(...)
         {
+            std::cout<< "\nUnhandled Exception in GameServer::server_loop() :";
             
         }
     }
@@ -152,6 +157,7 @@ GameServer::start()
     catch(...)
     {
         // 
+            std::cout<< "\nUnhandled Exception in GameServer::start() :";
     }
 
 }
@@ -168,6 +174,7 @@ void server_main(const char *ip_interface_name)
     serverAddrBuffer.sin_port = htons(HEX1_IP_PORT);
     ;   
     gameServer = new GameServer(&serverAddrBuffer, HEX1_IP_PORT);
+            std::cout<< "\nserver_main :";
     
     gameServer->start();
 }

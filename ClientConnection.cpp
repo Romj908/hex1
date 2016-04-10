@@ -19,17 +19,37 @@ ClientContext(const struct sockaddr_in *clientAddr,
                  int clientSocket)
 : ipAddr(*clientAddr), socket(clientSocket), state(State::EMPTY)
 {
+
 }
 
 ClientContext::~ClientContext() 
 {
+    std::cout << "\n~ClientContext() called";
 }
 
-void ClientContext::operator()() 
+int ClientContext::operator()() 
 {
+    std::cout<< "\nNew client running :" << boost::this_thread::get_id();
     
+    for (int i=0; i<10; i++)
+    {
+        std::cout<< i << ", ";
+        
+    }
+    ClientConnectionExitPoint thread_exit ( ClientCnxPtr(this),
+                                            boost::this_thread::get_id() );
+    boost::this_thread::at_thread_exit(thread_exit);
+    std::cout<< "\nNew client ending :" << boost::this_thread::get_id();
+    return 0;
 }
-
+d
+int ClientConnectionExitPoint::operator ()()
+{
+    std::cout<< "\nNew thread completed :" << this->th_id;
+    
+    // send a signal to the server thread ? goal is to remove the client context from the map and to release it.
+    return 0;
+}
 
 void ClientContext::deny_connection() 
 {

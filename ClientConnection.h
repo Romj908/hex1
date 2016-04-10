@@ -14,6 +14,7 @@
 #ifndef CLIENTCONNECTION_H
 #define CLIENTCONNECTION_H
 
+#include <boost/thread/thread.hpp>
 #include <memory>
 
 #include "util/ipUtilities.h"
@@ -43,7 +44,7 @@ public:
     virtual ~ClientContext();
     
     // entry point of the dedicated thread.
-    void operator()();
+    int operator()();
     
     in_addr_t get_in_addr_t() const {return ipAddr.sin_addr.s_addr; }
     
@@ -58,6 +59,23 @@ private:
  * Pointers are smart pointers
  */
 typedef std::shared_ptr<ClientContext> ClientCnxPtr;
+
+
+/**
+ * callable class used read is going to die.
+ */
+
+class ClientConnectionExitPoint
+{
+public:
+    ClientCnxPtr context;
+    boost::thread::id th_id;
+    // exit point of the dedicated thread.
+    int operator()();
+    
+    // exit point of all client thread - called through boost::this_thread::at_thread_exit() 
+    ClientConnectionExitPoint(ClientCnxPtr ctx, boost::thread::id who) : context(ctx), th_id(who) {};
+};
 
 
 #endif /* CLIENTCONNECTION_H */
