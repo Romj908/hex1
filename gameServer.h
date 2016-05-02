@@ -18,25 +18,25 @@
 #include <map>
 #include "util/ipUtilities.h"
 
-#include "ClientConnection.h"
+#include "ServerClientConnection.h"
 
 
 class GameServer
 {
 public:
-    typedef std::list<ClientCnxPtr>                         ContextList;
-    typedef std::map<in_addr_t,ClientCnxPtr>::iterator      ContextIterator;
+    typedef std::list<ServerClientCnxPtr>                         ContextList;
+    typedef std::map<in_addr_t,ServerClientCnxPtr>::iterator      ContextIterator;
     
 private:
     unsigned short                              port;
     struct sockaddr_in                          ipAddr;
     int                                         server_socket;
-    std::map<in_addr_t,ClientCnxPtr>            clientsContexts;
+    std::map<in_addr_t,ServerClientCnxPtr>            clientsContexts;
     ContextList                                 rejectedConnections;
     
     bool existing_connection() const;
-    ClientCnxPtr wait_new_connection() const;
-    void handle_new_client_connection(ClientCnxPtr new_client);
+    ServerClientCnxPtr wait_new_connection() const;
+    void handle_new_client_connection(ServerClientCnxPtr new_client);
     void handle_client_message();
     void server_loop();
     
@@ -63,7 +63,7 @@ public:
 
 
 
-typedef std::shared_ptr<ClientContext> ClientCnxPtr;
+typedef std::shared_ptr<ServerClientConnection> ServerClientCnxPtr;
 
 extern GameServer *gameServer;
 

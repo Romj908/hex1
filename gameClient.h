@@ -14,6 +14,10 @@
 #ifndef GAMECLIENT_H
 #define GAMECLIENT_H
 
+/**
+ * Class handling the application in client mode.
+ * 
+ */
 
 extern void client_main(const char *ip_interface_name = "lo");
 

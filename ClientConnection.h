@@ -10,73 +10,88 @@
  *
  * Created on April 8, 2016, 12:32 PM
  */
-
 #ifndef CLIENTCONNECTION_H
 #define CLIENTCONNECTION_H
 
-#include <boost/thread/thread.hpp>
-#include <memory>
-
+#include <signal.h>
 #include "util/ipUtilities.h"
 
-class ClientContext
+class ClientConnection
 {
     enum class State {
-        EMPTY,
-        REJECTING,
+        SOCK_NULL,
+        SOCK_CONNECTING,
+        SOCK_CONNECTED,
+        CNX_REJECTED,
         REGISTERING,
-        CONNECTED,
-        ERROR,
-        CLOSING
-        
+        AUTH_REJECTED,
+        REGISTERED,
+        SOCK_ERROR,
+        CLOSING,
+        SOCK_DISCONNECT
     };
 
-    State state;
-    struct sockaddr_in  ipAddr;
-    int socket;
+    enum class TxState {
+        TX_INIT,
+        TX_READY,
+        TX_BUSY
+    };
+    
+    enum class RxState {
+        RX_INIT,
+        RX_IDLE,
+        RX_DATA
+    };
+    
+    State                       state;
+    TxState                     txState;
+    RxState                     rxState;
+    std::string                 ip_interface_name;
+    struct sockaddr_in          server_addr;
+    int                         client_socket;
+    
+    // one unique instance is allowed. Use a Singleton pattern.
+    
+    static ClientConnection *clientModeConnection; // the unique instance of the class.
+    
+    ClientConnection(ClientConnection&) = delete;  // prevent override of the copy constructor
+    ClientConnection& operator=(ClientConnection&) = delete;  // prevent copy
+    
+    ClientConnection(ClientConnection&&) = delete;  // prevent move constructor (C++ 2011)
+    ClientConnection& operator=(ClientConnection&&) = delete;  // prevent move (C++ 2011).
+    
+    
+    ClientConnection() = delete;  // default constructor not used
+    
+    ClientConnection(const struct sockaddr_in &serverAddr, std::string &ip_interface_name);  // is private.
     
 public:
-    //ClientConnection();
-    ClientContext(const struct sockaddr_in *clientAddr, int socket);
-
-    ClientContext(const ClientContext& orig) = delete;
+    static void createObject(const struct sockaddr_in &serverAddr, std::string &ip_interface_name)
+    {
+        if (clientModeConnection == nullptr)
+            clientModeConnection = new ClientConnection( serverAddr, ip_interface_name);
+        
+    }
+    static ClientConnection *object() 
+    {
+        return clientModeConnection;
+    };
     
-    virtual ~ClientContext();
     
-    // entry point of the dedicated thread.
-    int operator()();
-    
-    in_addr_t get_in_addr_t() const {return ipAddr.sin_addr.s_addr; }
-    
-    void deny_connection();
-    void wait_authentication();
-    
+public:
+    void user_registration();
 private:
-
-};
-
-/**
- * Pointers are smart pointers
- */
-typedef std::shared_ptr<ClientContext> ClientCnxPtr;
-
-
-/**
- * callable class used read is going to die.
- */
-
-class ClientConnectionExitPoint
-{
-public:
-    ClientCnxPtr context;
-    boost::thread::id th_id;
-    // exit point of the dedicated thread.
-    int operator()();
+    void handle_server_message();
     
-    // exit point of all client thread - called through boost::this_thread::at_thread_exit() 
-    ClientConnectionExitPoint(ClientCnxPtr ctx, boost::thread::id who) : context(ctx), th_id(who) {};
+public:
+    
+    void socket_connection();
+
+    void SignalSIGIOHandler(siginfo_t *pInfo);
+
+    static void SocketSignalsStaticHandler(int signalType, siginfo_t *pInfo, void *);
+    
+    
 };
 
-
-#endif /* CLIENTCONNECTION_H */
-
+#endif
