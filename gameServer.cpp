@@ -10,7 +10,9 @@
 #include <cstring> // memset()
 #include <iostream>
 
-#include <boost/thread/thread.hpp>
+//#include <boost/thread/thread.hpp>
+#include <fcntl.h>
+#include <unistd.h>// getpid()
 
 #include "hex1Protocol.h"
 
@@ -26,97 +28,107 @@ GameServer::GameServer(const struct sockaddr_in *serverAddr,
             : port(serverPort), ipAddr(*serverAddr)
 
 {
-    int status = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ServerSocketsRouter::createObject();
+}
+
+void GameServer::SetupListenSocket()
+{
+    int status = ::socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (status < 0)
     {
         throw("Server's socket creation error");
     }
     this->server_socket = status;
 
-    status = bind( server_socket, (struct sockaddr *) &ipAddr, sizeof(ipAddr));
+    status = ::bind( server_socket, (struct sockaddr *) &ipAddr, sizeof(ipAddr));
     if (status < 0)
     {
         throw("Server's bind() error");
     }
     
     // Allow TCP incoming connections on that socket
-    status = listen( server_socket, SOCK_MAX_PENDING);
+    status = ::listen( server_socket, SOCK_MAX_PENDING);
     
     if (status < 0)
     {
         throw("Server's listen() error");
     }
-}
-
-
-void GameServer::handle_client_message()
-{
-   // analyse the received message and route it accordingly
-   ;
+    /* Active non blocking mode on that socket */
+    status = ::fcntl(server_socket, F_SETFL, O_NONBLOCK );
+    if (status < 0)
+    {
+        throw("client socket's fcntl() error");
+    }
 
 }
 
 
 bool GameServer::existing_connection() const
 {
-    // check if the indicated connection is already know.
+    // check if the indicated connection is already know.clientAddr
     return false;
 }
 
 // registrate a the new remote client 
-// create a new thread dedicated to that client. 
 
 void GameServer::handle_new_client_connection(ServerClientCnxPtr new_client)
 {
-    // is it a message from a new client or from a already registerd one ?
-   ContextIterator found_item;    // map::find() returns an iterator on the found item.
-   found_item = clientsContexts.find( new_client->get_in_addr_t());
+    // is it a message from a new client or from a already registered one ?
+//   ContextIterator found_item;    // map::find() returns an iterator on the found item.
+//   found_item = clientsContexts.find( new_client->get_in_addr_t());
+//
+//   if (found_item != clientsContexts.end())
+//   {
+//       // message from a know client (same IP address). A connection already exist for it.
+//       // reject that new request and let the existing run. Perhaps the player launched the client application twice.
+//       // Had the distant experienced a crash, or some problems, just wait until a TCP alarm on the already exisiting 
+//       // connection.
+//       rejectedConnections.push_back(new_client); // queue all rejected connections in their list
+//       new_client->deny_connection();
+//   }
+//   else
+//   {
+//       // normal case - no matching context => it's well a new session
+//       // insert that context in a map container of the clients having an opened connections.
+//       clientsContexts.emplace( std::make_pair(new_client->get_in_addr_t(), new_client) );
+//
+//       new_client->wait_authentication();
+//   }
+   // in both cases start a dedicated process to handle the socket and that session.
 
-   if (found_item != clientsContexts.end())
-   {
-       // message from a know client (same IP address). A connection already exist for it.
-       // reject that new request and let the existing run. Perhaps the player launched the client application twice.
-       // Had the distant experienced a crash, or some problems, just wait until a TCP alarm on the already exisiting 
-       // connection.
-       rejectedConnections.push_back(new_client); // queue all rejected connections in their list
-       new_client->deny_connection();
-   }
-   else
-   {
-       // normal case - no matching context => it's well a new session
-       // insert that context in a map container of the clients having an opened connections.
-       clientsContexts.emplace( std::make_pair(new_client->get_in_addr_t(), new_client) );
-
-       new_client->wait_authentication();
-   }
-   // in both cases start a dedicated thread to handle the socket and that session.
-   // http://www.boost.org/doc/libs/1_60_0/doc/html/thread/thread_management.html#thread.thread_management.tutorial
-   // the callable object is the newly created client context.
-   boost::thread the_thread(boost::ref(*new_client)); // The thread's entry point is the callable ClientContext class.
-    
 }
 
 
-ServerClientCnxPtr GameServer::wait_new_connection() const
+bool GameServer::IncomingConnectionRequest(struct sockaddr_in &clientAddr, int &clientSock) const
 {
     // poll on the main socket for new clients or for messages from registered clients.
-    int clientSock;
-    struct sockaddr_in clientAddr;
+    int status;
     socklen_t addrLenght;
     addrLenght = sizeof(clientAddr);
-    clientSock = accept(server_socket, 
+    status = ::accept(server_socket, 
                         reinterpret_cast<struct sockaddr *>(&clientAddr), 
                         &addrLenght);
-    
     if (clientSock < 0)
     {
-        throw("Server's accept() error");
+        if (status == EAGAIN || status == EWOULDBLOCK)
+            return false;  // no pending request in the listen() queue)
+        else
+            throw("Server's accept() error");
     }
-    
-    ServerClientCnxPtr new_client(new ServerClientConnection(&clientAddr, clientSock));
-    return new_client;
+    else
+    {
+        clientSock = status;
+        return true;
+    }
 }
 
+bool GameServer::ActiveClientSocket(int &clientSock)
+{
+    
+    
+    
+    return false;
+}
 
 
 void GameServer::server_loop()
@@ -127,10 +139,15 @@ void GameServer::server_loop()
         {
             // Wait a new TCP connection from any client and create a corresponding object.
             std::cout<< "\nserver_loop  1:";
-            ServerClientCnxPtr new_client = wait_new_connection();
+            struct sockaddr_in clientAddr;
+            int new_socket;
+            if (IncomingConnectionRequest(clientAddr, new_socket))
+            {
+                ServerClientCnxPtr new_client;
+                new_client= ServerSocketsRouter::object()->CreateClientConnection(clientAddr, new_socket );
+            }
+            pause(); // wait for any signal.
             
-            std::cout<< "\n server_loop  2:";
-            handle_new_client_connection(new_client);
         }
         // handle socket exceptions.
         catch(boost::thread_resource_error e)

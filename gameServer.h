@@ -31,13 +31,19 @@ private:
     unsigned short                              port;
     struct sockaddr_in                          ipAddr;
     int                                         server_socket;
-    std::map<in_addr_t,ServerClientCnxPtr>            clientsContexts;
+    
+
+    std::map<in_addr_t,ServerClientCnxPtr>      clientsContexts;
     ContextList                                 rejectedConnections;
     
     bool existing_connection() const;
-    ServerClientCnxPtr wait_new_connection() const;
+    void SetupListenSocket();
+    bool IncomingConnectionRequest(struct sockaddr_in &clientAddr, int &clientSock) const;
+    ServerClientCnxPtr newClientConnection(struct sockaddr_in &clientAddrint, int &clientSock);
+    bool ActiveClientSocket(int &clientSock);
+    
+    void newClientProcess(struct sockaddr_in &clientAddrint, int &clientSock);
     void handle_new_client_connection(ServerClientCnxPtr new_client);
-    void handle_client_message();
     void server_loop();
     
     GameServer(GameServer&) = delete;
