@@ -15,7 +15,8 @@
 #define MSGSOCKET_H
 
 #include <signal.h>
-#include <list>  
+#include <deque>  
+#include <exception>  
 #include "ClientServerRequest.h"
 
 /*
@@ -31,11 +32,14 @@ protected:
         SOCK_CONNECTING,   // state not used when on server side.
         SOCK_CONNECTED,
         SOCK_ERROR,
-        SOCK_DISCONNECT
+        SOCK_DISCONNECTED
     };
     
     State    sock_state;
 
+    struct sockaddr_in          peer_ip_addr;
+    int                         socket_descr;  // system handle to the socket descriptor.
+    
     enum class TxState {
         TX_INIT,
         TX_READY,
@@ -49,15 +53,20 @@ protected:
     };
     
     TransferDirection           from;
-    TxState                     txState;
-    RxState                     rxState;
-    std::string                 ip_interface_name;
-    struct sockaddr_in          peer_ip_addr;
-    int                         socket_descr;  // system handle to the socket descriptor.
+    
+    TxState                     tx_state;
+    int                         tx_length;   // number of bytes of the current message that have been sent 
+    ClientServerMsgBodyPtr      tx_msg;      // pointer to the current L1 message's body under emission.
+    ClientServerL1MsgHeader     tx_header;   // l1 message's L1 header
+    
+    RxState                     rx_state;    
+    int                         rx_lenght;   // number of bytes of the current message that have been already received.
+    ClientServerL1MsgPtr        rx_msg;      // pointer to the current L1 message under reception. 
+    
     DataTransferId              ul_file_transfer_id;
     
-    std::list<ClientServerRequestPtr>       tx_fifo;
-    std::list<ClientServerL1MsgPointer>     rx_fifo;
+    std::deque<ClientServerRequestPtr>    tx_fifo;
+    std::deque<ClientServerL1MsgPtr>      rx_fifo;
         
     MsgSocket(MsgSocket&) = delete;  // prevent override of the copy constructor
     MsgSocket& operator=(MsgSocket&) = delete;  // prevent copy
@@ -65,29 +74,47 @@ protected:
     MsgSocket(MsgSocket&&) = delete;  // prevent move constructor (C++ 2011)
     MsgSocket& operator=(MsgSocket&&) = delete;  // prevent move (C++ 2011).
     
-    ~MsgSocket() = delete;  // default constructor not used
+    virtual ~MsgSocket() = default;
     
 protected:
-    // regular constructor
+    // the constructor
     MsgSocket(const struct sockaddr_in &serverAddr, 
-              std::string &ip_interface_name,
               int sock_descr,
               TransferDirection sending_from);
     
 public:
     virtual void 
-    socket_configuration();     // virtual because depending whether in client or server mode.
+    socketConfiguration();     // virtual because depending whether in client or server mode.
     
+    int 
+    getSocketDescr() {return socket_descr; }
     
     void 
     shutdown(); /* close the connection when the socket connection is active.*/
     
 public:
+    /* 
+     * Write some pending data to the socket.
+     * Returns whether new message(s) have been received 
+     */
     virtual int
-    writeData();
+    sendNextData();
     
-    virtual int
-    readData();
+    /* 
+     * Read any incoming pending data from the socket.
+     * Returns whether new message(s) have been received 
+     */
+    virtual bool
+    recvNextData();
+    
+    virtual DataTransferId 
+    transferFile();
+
+    virtual void 
+    sendMsg(ClientServerMsgRequestUPtr&& msg_ptr);
+    
+    virtual ClientServerL1MsgPtr
+    getNextReceivedMsg();
     
     enum class ErrorType {
         IGNORE,
@@ -96,56 +123,54 @@ public:
     };
 
     virtual MsgSocket::ErrorType 
-    handleError(); 
+    handleError() = 0; 
     
-    virtual void 
-    DataTransferId transferFile();
+protected:
+    virtual MsgSocket::ErrorType 
+    _getErrorType(int sock_err); 
+    
+    void    
+    _sendLoop();
+    
+    void 
+    _recvLoop();
+    
+    ssize_t 
+    _socketSend(char *buffer, int buffer_length, int flags=0);
+    
+    ClientServerL1MsgUPtr    
+    _recvBeginNewMsg();
+    
+    ssize_t 
+    _socketReceive(char *buffer, int buffer_length, int flags=0);
+    
     
 private:
-    void    _sendNextMsg();
-    ssize_t _socketSend(char *buffer, int buffer_length);
-    
-private:
-    /* obsolete code based on the use of the SIGIO signal because replaced by the use of select() and poll() */
+    /* obsolete code First implementation was  based on the use of the SIGIO signal because 
+     * I replaced it by the use of ::select() and ::poll().  but could used elsewhere.  */
     void socket_configuration_SIGIO();      /*currently not used */
     void SignalSIGIOHandler(siginfo_t *pInfo); /*currently not used */
     static void SocketSignalsStaticHandler(int signalType,  siginfo_t *pInfo, void *); /*currently not used */
 };
 
 
-/*
- * 
- * ClientSocket : socket handling of a client's socket, on client side.
- * 
- */
-class ClientSocket : public MsgSocket
+
+class peer_disconnection : public std::exception
 {
+    std::string       err_msg;
 public:
-     
-    ClientSocket(const struct sockaddr_in &serverAddr, std::string &ip_interface_name, int sock_descr);
+    virtual const char* what() const noexcept override
+    {
+        return err_msg.c_str();
+    };
     
-    // methods specific to the client mode.
-    void connect();
+    peer_disconnection(std::string&& msg) 
+    : err_msg{msg} 
+    {};
     
+    virtual ~peer_disconnection() = default;
+	
 };
 
-
-/*
- * 
- * ServerSocket : socket handling of a client's socket, on server side.
- * (it's not the server's socket listening for new connections!)
- * 
- * 
- */
-class ServerSocket : public MsgSocket
-{
-public:
-    ServerSocket(const struct sockaddr_in &serverAddr, std::string &ip_interface_name);
-    
-    virtual void socket_configuration() override;
-
-    // methods specific to the server mode.
-
-};
 #endif /* MSGSOCKET_H */
 

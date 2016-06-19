@@ -18,7 +18,10 @@
 #include <memory>
 #include <map>
 #include <list>
+#include <sys/select.h>
+#include <iostream>
 #include "ClientServerRequest.h"
+#include "ServerSocket.h"
 
 class ServerClientConnection
 {
@@ -34,27 +37,27 @@ class ServerClientConnection
     State state;
     
     // dedicated socket manager.
-    ServerSocket servSock;
+    ServerSocket *servSock;
     
     struct sockaddr_in  ipAddr;
-    DataTransferId              dl_file_transfer_id;
     
 public:
     //ServerSocketsRouter();
-    ServerClientConnection(const struct sockaddr_in *clientAddr, int socket);
+    ServerClientConnection(const struct sockaddr_in &clientAddr, int socket);
 
     ServerClientConnection(const ServerClientConnection& orig) = delete;
     
     virtual ~ServerClientConnection(); // remove that connection. 
         
     in_addr_t get_in_addr_t() const {return ipAddr.sin_addr.s_addr; }
-    int       get_socket_descr() const {return socket;}
+    int       get_socket_descr() const {return servSock->getSocketDescr();}
     
     void deny_connection();
     void wait_authentication();
     
-    void handle_client_message();// analyse the received message and route it accordingly
-    void socketError();  // An error occured on that connection. Handle it accordingly
+    void handle_client_message(ClientServerL1MsgPtr msg); // analyse the received message and route it accordingly
+    
+    bool socketError();  // An error occured on that connection. Handle it accordingly
     void socketDataRead();   // some incoming data have to be read
     int  socketDataWrite();  // some pending data can be written.
     
@@ -90,8 +93,10 @@ class ServerSocketsRouter
     
     // permanent bitmap of existing sockets, in the same format than for the call to ::pselect().
     // The server's listening socket doesn't appear in them.
-    int      clientsocks_nfds;
-    ::fd_set clientsocks_fds;    // highest value among the socket descriptors. First param of pselect().)
+    ::fd_set clientsocks_fds;    
+    
+    // highest value among the socket descriptors. First param of pselect().
+    int      clientsocks_nfds;  
     
     // temporary bitmap of the sockets to be polled for incoming data. It's set to a copy of clientsocks_fds when calling ::pselect()
     ::fd_set select_readfds;
@@ -120,7 +125,7 @@ class ServerSocketsRouter
     /*
         one unique instance of this class is allowed. Use a Singleton pattern.
      */
-    static ServerSocketsRouter *serverSocketsRouter; // the unique instance of the class.
+    static ServerSocketsRouter *serverSockRouterObject; // the unique instance of the class.
     
     ServerSocketsRouter(ServerSocketsRouter&) = delete;  // prevent override of the copy constructor
     ServerSocketsRouter& operator=(ServerSocketsRouter&) = delete;  // prevent copy
@@ -129,22 +134,26 @@ class ServerSocketsRouter
     ServerSocketsRouter& operator=(ServerSocketsRouter&&) = delete;  // prevent move (C++ 2011).
     
     ServerSocketsRouter();  // the constructor is private.
+    
+    virtual ~ServerSocketsRouter() = default;  // the destructor is private.
         
 public:
-    static void createObject()
+    static void 
+    createObject()
     {
-        if (serverSocketsRouter == nullptr)
-            serverSocketsRouter = new ServerSocketsRouter();
+        if (serverSockRouterObject == nullptr)
+            serverSockRouterObject = new ServerSocketsRouter();
         
     }
-    static ServerSocketsRouter *object() 
+    static ServerSocketsRouter *
+    object() 
     {
-        return serverSocketsRouter;
+        return serverSockRouterObject;
     };
 
 public:
     ServerClientCnxPtr 
-    CreateClientConnection(struct sockaddr_in &clientAddr, int &clientSock);
+    CreateClientConnection(struct sockaddr_in &clientAddr,  hex1::socket_d clientSock);
     
     void 
     ReleaseClientConnection(ServerClientCnxPtr the_cnx);

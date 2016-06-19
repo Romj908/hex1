@@ -22,8 +22,12 @@
 #include "ClientServerPrtcl.h"
 
 
-typedef std::shared_ptr<ClientServerL1Msg> ClientServerL1MsgPointer;
-typedef std::shared_ptr<ClientServerMsg> ClientServerMsgPointer;
+typedef std::shared_ptr<ClientServerL1Msg> ClientServerL1MsgPtr;
+typedef std::unique_ptr<ClientServerL1Msg> ClientServerL1MsgUPtr;
+
+typedef std::shared_ptr<ClientServerMsgBody> ClientServerMsgBodyPtr;
+typedef std::unique_ptr<ClientServerMsgBody> ClientServerMsgBodyUPtr;
+
 
 /*******************************************************************************
  * 
@@ -50,19 +54,21 @@ private:
     ClientServerRequest(const ClientServerRequest& orig) = delete;
     
 public:
-    bool someDataToSend() const {return l2_payload_length > nb_payload_bytes_sent;}
+    bool 
+    someDataToSend() const {return l2_payload_length > nb_payload_bytes_sent;}
     
-    int  getPayloadLength() const {return l2_payload_length; }
+    int  
+    getPayloadLength() const {return l2_payload_length; }
     
-protected:
-    virtual ClientServerMsgPointer 
-    buildNextMsg(ClientServerL1MessageId &l1_msg_id, int &length) = 0;
+    virtual ClientServerMsgBodyPtr 
+    buildNextL2Msg(ClientServerL1MessageId &l1_msg_id, int &length) = 0;
     
     
 };
 
 typedef std::shared_ptr<ClientServerRequest> ClientServerRequestPtr;
 
+typedef std::unique_ptr<ClientServerRequest> ClientServerRequestUPtr;
 
 /*******************************************************************************
  * 
@@ -73,15 +79,15 @@ class ClientServerMsgRequest : public ClientServerRequest
 {
     ClientServerL1MessageId l1_msg_id;  // l1 message id of the next message.
     
-    ClientServerMsgPointer  msg_ptr;
+    ClientServerMsgBodyPtr  msg_ptr;
     
 public:
-    ClientServerMsgRequest(ClientServerMsgPointer  l2_msg_ptr, 
+    ClientServerMsgRequest(ClientServerMsgBodyPtr  l2_msg_ptr, 
                            int nb_bytes,
                            ClientServerL1MessageId msg_id = ClientServerL1MessageId::DATA_TRANSFER_REQ)
     : ClientServerRequest(nb_bytes),  msg_ptr(l2_msg_ptr), l1_msg_id(msg_id) 
     {
-        assert(nb_bytes < CLIENTSERVER_MAX_L2_MSG_SIZE);
+        assert(nb_bytes < CLIENTSERVER_MAX_L1_MSG_BODY_SIZE);
     }
         
     virtual ~ClientServerMsgRequest() = default;
@@ -90,11 +96,16 @@ private:
     ClientServerMsgRequest(const ClientServerMsgRequest& orig) = delete;
 
 protected:
-    virtual ClientServerMsgPointer 
-    buildNextMsg(ClientServerL1MessageId &l1_msg_id, int &length) override ;
+    virtual ClientServerMsgBodyPtr 
+    buildNextL2Msg(ClientServerL1MessageId &l1_msg_id, int &length) override ;
      
     
 };
+
+typedef std::shared_ptr<ClientServerMsgRequest> ClientServerMsgRequestPtr;
+
+typedef std::unique_ptr<ClientServerMsgRequest> ClientServerMsgRequestUPtr;
+
 
 #endif /* CLIENTSERVERREQUEST_H */
 

@@ -32,7 +32,7 @@ void client_init(const char *ip_interface_name)
     
     ClientConnection::createObject( serverAddrBuffer, interfaceName);   
     
-    ClientConnection::object()->socket_connection();
+    ClientConnection::object()->configureSocket();
 
 }
 

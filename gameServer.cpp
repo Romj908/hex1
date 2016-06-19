@@ -28,7 +28,11 @@ GameServer::GameServer(const struct sockaddr_in *serverAddr,
             : port(serverPort), ipAddr(*serverAddr)
 
 {
+    // create the handler of socket descriptors.
     ServerSocketsRouter::createObject();
+    
+    // create the main server's listening socket.
+    SetupListenSocket();
 }
 
 void GameServer::SetupListenSocket()
@@ -144,15 +148,13 @@ void GameServer::server_loop()
             if (IncomingConnectionRequest(clientAddr, new_socket))
             {
                 ServerClientCnxPtr new_client;
-                new_client= ServerSocketsRouter::object()->CreateClientConnection(clientAddr, new_socket );
+                auto sock_desc = static_cast<hex1::socket_d>(new_socket);
+                new_client= ServerSocketsRouter::object()->CreateClientConnection(clientAddr, sock_desc );
             }
             pause(); // wait for any signal.
-            
-        }
-        // handle socket exceptions.
-        catch(boost::thread_resource_error e)
-        {
-            std::cout << "\nboost::thread_resource_error " << e.what();
+            //...
+            // pool the incoming messages and send outgoing messages on any existing connection.
+            // to_do
         }
         // handle typical socket exceptions (broken pipe,...))
         catch(...)
@@ -175,7 +177,7 @@ GameServer::start()
     catch(...)
     {
         // 
-            std::cout<< "\nUnhandled Exception in GameServer::start() :";
+            std::cout<< "\nGameServer::start(): Unhandled Exception";
     }
 
 }
@@ -191,9 +193,12 @@ void server_main(const char *ip_interface_name)
     serverAddrBuffer.sin_addr.s_addr = htonl(INADDR_ANY);   // don't care to retrieve the local server's address.
     serverAddrBuffer.sin_port = htons(HEX1_IP_PORT);
     ;   
+    std::cout<< "\nserver_main :";
     gameServer = new GameServer(&serverAddrBuffer, HEX1_IP_PORT);
-            std::cout<< "\nserver_main :";
     
     gameServer->start();
+    
+    std::cout<< "\nserver_main : exiting";
+    delete gameServer;
 }
 

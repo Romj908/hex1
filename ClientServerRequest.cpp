@@ -14,8 +14,8 @@
 
 #include "ClientServerRequest.h"
 
-ClientServerMsgPointer 
-ClientServerMsgRequest::buildNextMsg(ClientServerL1MessageId &msg_id, int &length)
+ClientServerMsgBodyPtr 
+ClientServerMsgRequest::buildNextL2Msg(ClientServerL1MessageId &msg_id, int &length)
 {
     if (someDataToSend())
     {

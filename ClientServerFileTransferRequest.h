@@ -23,9 +23,9 @@
 
 /*******************************************************************************
  * 
- * ClientServerFileTransferRequest : 
- * The request is to transfer a complete file, in general in several messages.
- * 
+ * ClientServerTransferRequest : 
+ * The request is to transfer some long data in several messages.
+ * This is an abstract class
  *******************************************************************************/
 
 class ClientServerTransferRequest : public ClientServerRequest
@@ -34,14 +34,17 @@ protected:
     DataTransferId  transfer_id; // the transaction identifier, the same during all the transfer.
     unsigned short  l2_action;         // some additionnal related upper level's private information. temporary.
     
-    ClientServerMsgPointer buffer_pointer; // the buffer is not dynamicaly allocated, so keep a shared_pointer on it to keep it safe.
+    ClientServerMsgBodyPtr msg_ptr; // the buffer containing the current message is not dynamicaly allocated, 
+                                            // so keep a shared_pointer on it to keep it safe.
     
 private:
     // the default constructor is not visible.
     ClientServerTransferRequest() = default;  
     
-private:
+    // copy constructor not visible
     ClientServerTransferRequest(const ClientServerTransferRequest& orig) = delete;
+    // move constructor not visible
+    ClientServerTransferRequest(ClientServerTransferRequest&& orig) = delete;
     
 protected:    
     static DataTransferId next_transfer_id;
@@ -51,12 +54,13 @@ protected:
     ClientServerTransferRequest(size_t nb_bytes, unsigned short l2_action = 0 )
     : ClientServerRequest(nb_bytes), l2_action(l2_action)
     {
+        msg_ptr.reset(new ClientServerMsgBody); /* smart ptr => no delete required in the destructor.*/
     }
     
-    virtual ~ClientServerTransferRequest();
+    virtual ~ClientServerTransferRequest() = default;
     
-    virtual char *
-    getNextDataBlock(size_t &nb_bytes) = 0;
+//    virtual char *
+//    getNextDataBlock(size_t &nb_bytes) = 0;
     
 };
 
@@ -74,8 +78,8 @@ protected:
     int     file_size(void) const;
     ssize_t file_read_data(char *to, size_t nb_bytes);
     
-    virtual char *
-    getNextDataBlock(size_t &nb_bytes) override;
+//    virtual char *
+//    getNextDataBlock(size_t &nb_bytes) override;
     
 private:
     // the default constructor is not visible.
@@ -88,8 +92,8 @@ public:
     virtual ~ClientServerFileTransferRequest();
         
  public:
-   virtual ClientServerMsgPointer 
-   buildNextMsg(ClientServerL1MessageId &l1_msg_id, int &length) override;
+   virtual ClientServerMsgBodyPtr 
+   buildNextL2Msg(ClientServerL1MessageId &l1_msg_id, int &length) override;
      
 };
 
@@ -103,8 +107,8 @@ class ClientServerMsgTransferRequest : public ClientServerTransferRequest
 protected:    
     const char *source_buffer;  // the address where the message to send is stored.
         
-    virtual char *
-    getNextDataBlock(size_t &nb_bytes) override;
+//    virtual char *
+//    getNextDataBlock(size_t &nb_bytes) override;
     
 private:
     // the default constructor is not visible.
@@ -117,8 +121,8 @@ public:
     virtual ~ClientServerMsgTransferRequest();
         
  public:
-    virtual ClientServerMsgPointer 
-    buildNextMsg(ClientServerL1MessageId &l1_msg_id, int &length) override;
+    virtual ClientServerMsgBodyPtr 
+    buildNextL2Msg(ClientServerL1MessageId &l1_msg_id, int &length) override;
      
 };
 

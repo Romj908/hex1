@@ -15,7 +15,7 @@
 #define CLIENTSERVERPRTCL_H
 
 /* Segment the socket flow in messages having a reasonnable size */
-#define CLIENTSERVER_MAX_L2_MSG_SIZE  (1024*8)
+#define CLIENTSERVER_MAX_L1_MSG_BODY_SIZE  (1024*8)
 
 /* some constants */
 #define CLIENTSERVER_VERSION_STRING_LENGTH  32
@@ -23,6 +23,14 @@
 #define CLIENTSERVER_USER_PASSWD_STRING_LENGTH  32
 
 #define CLIENTSERVER_FILE_NAME_LENGTH  256
+
+enum class TransferDirection 
+: unsigned char 
+{
+    FROM_SERVER, 
+    FROM_CLIENT
+};
+
 
 enum class ClientServerL1MessageId 
 : unsigned short
@@ -98,8 +106,6 @@ struct RegistrationRej
     Cause cause; 
 };
 
-enum class TransferDirection : unsigned char {FROM_SERVER, FROM_CLIENT};
-
 typedef long DataTransferId;
 
 struct FileTransferReqHeader
@@ -109,7 +115,7 @@ struct FileTransferReqHeader
 
     unsigned long  file_size;  // total file's size in number of bytes
     
-    unsigned short      l2_action; // for private use by the L2
+    unsigned short l2_action; // for private use by the L2
         
     char file_name[CLIENTSERVER_FILE_NAME_LENGTH]; // 
 };
@@ -117,7 +123,7 @@ struct FileTransferReqHeader
 struct FileTransferReq
 {
     FileTransferReqHeader header;
-    char  l2_payload [CLIENTSERVER_MAX_L2_MSG_SIZE - sizeof(header)];
+    char  l2_payload [CLIENTSERVER_MAX_L1_MSG_BODY_SIZE - sizeof(header)];
 };
 
 
@@ -132,7 +138,7 @@ struct DataTransferReqHeader
 struct DataTransferReq
 {
     DataTransferReqHeader header;
-    char  l2_payload [CLIENTSERVER_MAX_L2_MSG_SIZE - sizeof(header)];
+    char  l2_payload [CLIENTSERVER_MAX_L1_MSG_BODY_SIZE - sizeof(header)];
 };
 
 
@@ -145,12 +151,12 @@ struct DataTransferHeader
 struct DataTransferBlk
 {
     DataTransferHeader  header;
-    char  l2_payload [CLIENTSERVER_MAX_L2_MSG_SIZE - sizeof(header)];
+    char  l2_payload [CLIENTSERVER_MAX_L1_MSG_BODY_SIZE - sizeof(header)];
 };
 
-typedef char L1Payload[CLIENTSERVER_MAX_L2_MSG_SIZE];
+typedef char L1Payload[CLIENTSERVER_MAX_L1_MSG_BODY_SIZE];
 
-union ClientServerMsg
+union ClientServerMsgBody
 {
     L1Payload     l1_payload;
     
@@ -187,7 +193,7 @@ struct ClientServerL1MsgHeader
 struct ClientServerL1Msg
 {
     ClientServerL1MsgHeader        l1_header;
-    ClientServerMsg                body;
+    ClientServerMsgBody            l1_body;
 };
 
 

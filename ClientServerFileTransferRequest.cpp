@@ -19,17 +19,23 @@
 
 DataTransferId ClientServerTransferRequest::next_transfer_id = 1;
 
-bool ClientServerFileTransferRequest::eof() const
+bool 
+ClientServerFileTransferRequest::
+eof() const
 {
     return ::feof(file);
 }
 
-void ClientServerFileTransferRequest::rewind() const
+void 
+ClientServerFileTransferRequest::
+rewind() const
 {
     ::fseek(file,0,SEEK_SET);
 }
 
-int ClientServerFileTransferRequest::file_size(void) const
+int 
+ClientServerFileTransferRequest::
+file_size(void) const
 {
     int save_pos = ::ftell(file);
     ::fseek(file,0,SEEK_END);
@@ -39,7 +45,9 @@ int ClientServerFileTransferRequest::file_size(void) const
     
 }
 
-ssize_t ClientServerFileTransferRequest::file_read_data(char *to, size_t nb_bytes)
+ssize_t 
+ClientServerFileTransferRequest::
+file_read_data(char *to, size_t nb_bytes)
 {
     ssize_t nb = ::read(fileno(this->file), to, nb_bytes);
     if (nb < 0)
@@ -54,9 +62,9 @@ ssize_t ClientServerFileTransferRequest::file_read_data(char *to, size_t nb_byte
 ClientServerFileTransferRequest::
 ClientServerFileTransferRequest(std::string f_name, 
                                 unsigned short l2_action)
-:       ClientServerRequest(0),             /* set temporarily the size of the transfer to 0. */
-        file_name(f_name), 
-        buffer_pointer(new ClientServerMsg) /* shared_ptr => no delete required in the destructor.*/
+:       ClientServerTransferRequest(0,0),             /* set temporarily the size of the transfer to 0. */
+        file_name(f_name)
+        
 {
     // try to open the target file at object construction.
     file = ::fopen(file_name.c_str(), "r");
@@ -71,7 +79,8 @@ ClientServerFileTransferRequest(std::string f_name,
     this->l2_payload_length = this->file_size();
 }
         
-ClientServerFileTransferRequest::~ClientServerFileTransferRequest() 
+ClientServerFileTransferRequest::
+~ClientServerFileTransferRequest() 
 {
     if (::fclose(this->file))
     {
@@ -81,8 +90,9 @@ ClientServerFileTransferRequest::~ClientServerFileTransferRequest()
 }
 
 
-ClientServerMsgPointer 
-ClientServerFileTransferRequest::buildNextMsg(ClientServerL1MessageId &msg_id, int &length)
+ClientServerMsgBodyPtr 
+ClientServerFileTransferRequest::
+buildNextL2Msg(ClientServerL1MessageId &msg_id, int &length)
 {
 
     if (this->someDataToSend())
@@ -91,7 +101,7 @@ ClientServerFileTransferRequest::buildNextMsg(ClientServerL1MessageId &msg_id, i
         {
             // it's the begin of the transfer. The first block is the transfer descriptor.
             msg_id = ClientServerL1MessageId::FILE_TRANSFER_REQ;
-            FileTransferReq *transfer_req = &buffer_pointer->file_transfer_req;
+            FileTransferReq *transfer_req = &msg_ptr->file_transfer_req;
             ::memset(transfer_req->header.file_name, ' ', CLIENTSERVER_FILE_NAME_LENGTH);
             
             // copy the file's name into the message
@@ -115,7 +125,7 @@ ClientServerFileTransferRequest::buildNextMsg(ClientServerL1MessageId &msg_id, i
         {
             // the transfer alread began. The next message is then a data block.
             msg_id = ClientServerL1MessageId::TRANSFER_DATA_BLK;
-            DataTransferBlk *data_blk = &buffer_pointer->data_transfer_blk;
+            DataTransferBlk *data_blk = &msg_ptr->data_transfer_blk;
             data_blk->header.byte_position = htonl(this->nb_payload_bytes_sent);
             data_blk->header.transfer_id = htonl(this->transfer_id);
             
@@ -129,12 +139,13 @@ ClientServerFileTransferRequest::buildNextMsg(ClientServerL1MessageId &msg_id, i
         assert(nb_payload_bytes_sent <= l2_payload_length);
         
     }
-    return this->buffer_pointer;
+    return this->msg_ptr;
 }
 
 
-ClientServerMsgPointer 
-ClientServerMsgTransferRequest::buildNextMsg(ClientServerL1MessageId &msg_id, int &length)
+ClientServerMsgBodyPtr 
+ClientServerMsgTransferRequest::
+buildNextL2Msg(ClientServerL1MessageId &msg_id, int &length)
 {
 
     if (this->someDataToSend())
@@ -143,7 +154,7 @@ ClientServerMsgTransferRequest::buildNextMsg(ClientServerL1MessageId &msg_id, in
         {
             // it's the begin of the transfer. The first block is the transfer descriptor.
             msg_id = ClientServerL1MessageId::DATA_TRANSFER_REQ;
-            DataTransferReq *data_transfer_req = &buffer_pointer->data_transfer_req;
+            DataTransferReq *data_transfer_req = &msg_ptr->data_transfer_req;
                         
             // set the size of the file
             data_transfer_req->header.total_size = htonl(this->l2_payload_length); // total size.
@@ -169,7 +180,7 @@ ClientServerMsgTransferRequest::buildNextMsg(ClientServerL1MessageId &msg_id, in
         {
             // the transfer alread began. The next message is then a data block.
             msg_id = ClientServerL1MessageId::TRANSFER_DATA_BLK;
-            DataTransferBlk *data_blk = &buffer_pointer->data_transfer_blk;
+            DataTransferBlk *data_blk = &msg_ptr->data_transfer_blk;
             data_blk->header.byte_position = htonl(this->nb_payload_bytes_sent);
             data_blk->header.transfer_id = htonl(this->transfer_id);
             
@@ -190,5 +201,12 @@ ClientServerMsgTransferRequest::buildNextMsg(ClientServerL1MessageId &msg_id, in
         assert(nb_payload_bytes_sent <= l2_payload_length);
         
     }
-    return this->buffer_pointer;
+    return this->msg_ptr;
 }
+
+//char *
+//ClientServerMsgTransferRequest::
+//getNextDataBlock(size_t &nb_bytes)
+//{
+//    
+//}

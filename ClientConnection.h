@@ -17,9 +17,12 @@
 #include <list>  
 #include "ClientServerRequest.h"
 
+#include "ClientSocket.h"
+
 class ClientConnection
 {
     enum class CnxState {
+        NO_SOCKET,
         NO_CONNECTION,
         CONNECTING,
         CONNECTED,
@@ -31,6 +34,11 @@ class ClientConnection
         CNX_ERROR,
     };
     CnxState    cnx_state;
+    
+    struct sockaddr_in server_ip_addr;
+    std::string        ip_interface_name;
+    
+    std::unique_ptr<ClientSocket> clientSocket; // unique pointer to the socket object.
 
     /*
         one unique instance of this class is allowed. Use a Singleton pattern.
@@ -48,28 +56,51 @@ class ClientConnection
     ClientConnection(const struct sockaddr_in &serverAddr, std::string &ip_interface_name);  // the constructor is private.
     
 public:
-    static void createObject(const struct sockaddr_in &serverAddr, std::string &ip_interface_name)
+    static void 
+    createObject(const struct sockaddr_in &serverAddr, std::string &ip_interface_name)
     {
         if (clientModeConnection == nullptr)
             clientModeConnection = new ClientConnection( serverAddr, ip_interface_name);
         
     }
-    static ClientConnection *object() 
+    
+    static ClientConnection *
+    object() 
     {
         return clientModeConnection;
     };
     
+    virtual ~ClientConnection()
+    {
+        assert(clientModeConnection != nullptr);
+        delete clientModeConnection;  
+        clientModeConnection = nullptr;
+    }
     
 public:
-    void sendMsgToServer(ClientServerMsgPointer msg_ptr);
-    ClientServerMsgPointer receiveMsgFromServer();
+    void 
+    configureSocket();
     
-    void user_registration();
+    void 
+    sendMsgToServer(ClientServerMsgBodyPtr msg_ptr);
+    
+    ClientServerMsgBodyPtr 
+    receiveMsgFromServer();
+    
+    void 
+    user_registration();
+    
+    /* poll all pending incoming/outcoming data, if any. This function doesn't block. */
+    void 
+    poll();
     
 private:
-    void handle_server_message();
+    void 
+    handle_server_message(ClientServerL1MsgPtr p_msg);
     
-public:
+protected:
+    virtual void 
+    setState(CnxState new_state);
     
     
     

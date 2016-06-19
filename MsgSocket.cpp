@@ -15,6 +15,7 @@
 #include <memory>
 #include <fcntl.h>
 #include <unistd.h>// getpid()
+#include <assert.h>
 #include "util/ipUtilities.h"
 
 #include "hex1Protocol.h"
@@ -24,25 +25,27 @@
 
 MsgSocket::
 MsgSocket(const struct sockaddr_in &serverAddr, 
-        std::string &ip_interface_name,
         int socket_descr,
         TransferDirection sending_from ) : 
 
         peer_ip_addr(serverAddr), 
-        ip_interface_name(ip_interface_name), 
         socket_descr(socket_descr),
-        from(sending_from)
+        from(sending_from),
+        rx_msg(nullptr)
 {
     sock_state = State::SOCK_NULL;
-    txState = TxState::TX_INIT;
-    rxState = RxState::RX_INIT;
+    tx_state = TxState::TX_INIT;
+    rx_state = RxState::RX_INIT;
+    rx_lenght = 0;
+    tx_length = 0;
+    tx_msg.reset();
 }
 
-void MsgSocket::
-socket_configuration() 
+void 
+MsgSocket::
+socketConfiguration() 
 {
     int status;
-    
     
     /* Active socket's non blocking mode */
     status = ::fcntl(socket_descr, F_SETFL, O_NONBLOCK);
@@ -53,62 +56,93 @@ socket_configuration()
     
 }
 
-ssize_t MsgSocket::
-_socketSend(char *buffer, int buffer_length)
+ssize_t 
+MsgSocket::
+_socketSend(char *buffer, int buffer_length, int flags)
 {
-    ssize_t nb_bytes = ::send(this->socket_descr, buffer, buffer_length, 0 /*default behavior*/);
-    return nb_bytes;
+    ssize_t nb_sent = ::send(this->socket_descr, buffer, buffer_length, flags);
+    assert(nb_sent == sizeof(tx_header) || nb_sent == EWOULDBLOCK);
+    return nb_sent;
 }
 
-void MsgSocket::
-_sendNextMsg()
+void 
+MsgSocket::
+_sendLoop()
 {
-    while (txState == TxState::TX_READY && !tx_fifo.empty())
+    ClientServerRequestPtr req_ptr = tx_fifo.front();
+    ssize_t nb_sent;
+    
+    while (tx_state == TxState::TX_READY && !tx_fifo.empty())
     {
-        ClientServerRequestPtr req_ptr = tx_fifo.front();
         if (req_ptr->someDataToSend())
         {
-            ClientServerL1MessageId l1_msg_id;
-            int length;
-            int nb_sent;
-            ClientServerMsgPointer msg_ptr = req_ptr->buildNextMsg(l1_msg_id, length);
-            
-            // knowing the length of the message we can build and send the L1 header
-            ClientServerL1MsgHeader header;
-            header.id.u16   = htons(static_cast<uint16_t>(l1_msg_id));
-            header.lenght = htonl(length+sizeof(header));  // total lenght of the message 
-            header.from = this->from;
-            
-            nb_sent = _socketSend(reinterpret_cast<char *>(&header), sizeof(header));
-            assert(nb_sent == sizeof(header) || nb_sent == EWOULDBLOCK);
-            
-            // send the rest of the message
-            nb_sent = _socketSend(reinterpret_cast<char *>(msg_ptr.get()), length);
-            assert(nb_sent == length || nb_sent == EWOULDBLOCK);
-            
-            if ( nb_sent == EWOULDBLOCK)
+            if (!tx_msg) // bool operator.
             {
-                txState = TxState::TX_BUSY;
+                // retrieve the next L1 message 
+                ClientServerL1MessageId l1_msg_id;
+                int length = 0;
+                tx_msg = req_ptr->buildNextL2Msg(l1_msg_id, length);
+                // knowing the length of the message we can build the L1 header
+                tx_header.id.u16   = htons(static_cast<uint16_t>(l1_msg_id));
+                tx_header.lenght = htonl(length+sizeof(tx_header));  // total lenght of the message 
+                tx_header.from = this->from;
             }
-            else
+            if (tx_length == 0)
             {
-                // remove the element from the pending queue
-                tx_fifo.pop_front();
+                // send the L1 header
+                nb_sent = _socketSend(reinterpret_cast<char *>(&tx_header), sizeof(tx_header));
+                
+                if ( nb_sent == EWOULDBLOCK)
+                {
+                    tx_state = TxState::TX_BUSY;
+                    break; // leave the while()
+                }
+                else
+                    tx_length += nb_sent;
             }
+            nb_sent = tx_length < tx_header.lenght;
+            if (nb_sent > 0)
+            {
+                // send the rest of the message
+                nb_sent = _socketSend(reinterpret_cast<char *>(tx_msg.get()), nb_sent);
+                if ( nb_sent == EWOULDBLOCK)
+                {
+                    tx_state = TxState::TX_BUSY;
+                    break; // leave the while()
+                }
+                else
+                {
+                    tx_length += nb_sent;
+                    assert(tx_length <= tx_header.lenght);
+                }
+            }
+            if (tx_length == tx_header.lenght)
+            {
+                // the current message has been fully sent. Prepare to request the next one.
+                tx_msg.reset();      // release the pointer.
+                tx_length = 0;
+            }
+        }
+        else
+        {
+            // request has been served. Prepare move to the next one. 
+            tx_fifo.pop_front(); // remove the element from the pending queue
+            tx_msg.reset();      // release the pointer.
+            tx_length = 0;
         }
         
     }
     
 }
 
-virtual int
+int
 MsgSocket::
-writeData()
+sendNextData()
 {
     // at this point the socket is forceably ready to send, so its state is indicated as write-ready
-    txState = TxState::TX_READY;
+    tx_state = TxState::TX_READY;
     
-    _sendNextMsg();
+    _sendLoop();
     
     if (tx_fifo.empty())
         return 0;
@@ -116,30 +150,152 @@ writeData()
         return 1;
 }
 
-virtual int
-MsgSocket::readData()
+void 
+MsgSocket::
+sendMsg(ClientServerMsgRequestUPtr&& msg_ptr)
 {
-    return 0;
+    ClientServerRequestPtr the_req{ std::move(msg_ptr) }; // a unique_ptr can be moved to a shared_ptr
+    tx_fifo.push_back(the_req);
 }
 
-virtual MsgSocket::ErrorType 
+DataTransferId 
 MsgSocket::
-handleError()
+transferFile()
 {
-    /* the POSIX recvmsg() has top be used to know the error type. */
-    char iobuffer[UIO_MAXIOV];
-    struct iovec dummy_iovec = {.iov_base = iobuffer, .iov_len = UIO_MAXIOV };
-    struct msghdr msg_hdr;
-    msg_hdr.msg_iov = &dummy_iovec;
-    msg_hdr.msg_iovlen = 1;
-    msg_hdr.msg_name = nullptr;     // because not an UDP stream
-    msg_hdr.msg_namelen = 0;        // because not an UDP stream
-    msg_hdr.msg_control = nullptr;
-    msg_hdr.msg_controllen = 0;
-    int err = ::recvmsg(socket, &msg_hdr, MSG_PEEK );
-    // an error is expected on that socket, so -1 is expected.
-    assert(err == -1);
+    // to_do
+}
+
+ssize_t 
+MsgSocket::
+_socketReceive(char *buffer, int buffer_length, int flags)
+{
+    ssize_t nb_bytes = ::recv(this->socket_descr, buffer, buffer_length, flags);
     
+    if (nb_bytes <0)
+    {
+        nb_bytes = errno;
+        assert(nb_bytes == EWOULDBLOCK);
+    }
+    return nb_bytes;
+}
+
+ClientServerL1MsgUPtr 
+MsgSocket::
+_recvBeginNewMsg(void)
+{
+    ClientServerL1MsgUPtr p_msg{nullptr};
+    
+    // read the length of the next message.
+    int flags = MSG_PEEK;
+    unsigned long lenght;
+    int nb_recv = _socketReceive(reinterpret_cast<char *>(&lenght), sizeof(lenght), flags);
+    if (nb_recv > 0 )
+    {
+        // Successfully reading. Definitely consume these bytes (wiothout MSG_PEEK).
+        _socketReceive(reinterpret_cast<char *>(&lenght), sizeof(lenght));
+        
+        // allocate a new l1 msg buffer and set its lenght field.
+        p_msg.reset(new ClientServerL1Msg);
+        p_msg->l1_header.lenght = ::ntohl(lenght);
+        
+        // initialize the number of bytes read.
+        this->rx_lenght = sizeof(lenght);
+        
+        return p_msg;
+    }
+    else
+    {
+        // not the expected amount of data. Simply wait 
+        rx_state = RxState::RX_IDLE; 
+    }
+    return p_msg;
+}
+
+void 
+MsgSocket::
+_recvLoop()
+{
+    while (rx_state == RxState::RX_DATA)
+    {
+        // check if we are at the eve of a new l1 message. 
+        //If yes, read it's length and allocate the buffer.
+        if (rx_lenght == 0)
+        {
+            rx_msg.reset();
+            rx_msg = _recvBeginNewMsg();
+            if (!rx_msg)  // operator bool
+            {
+                rx_state == RxState::RX_IDLE;
+                break;
+            }
+        }
+        // if not all messages have been received request the rest of the message.
+        int nb = rx_lenght <= rx_msg->l1_header.lenght;
+        if (nb > 0)
+        {
+            char *raw = reinterpret_cast<char *>(rx_msg.get());
+            nb = _socketReceive(raw, nb);  
+            if (nb > 0)  // number of bytes effectively received.
+            {
+                rx_lenght += nb;
+            }
+            else 
+            {
+                // all bytes have been read, or an error occured.
+                assert(nb == EWOULDBLOCK);
+                rx_state == RxState::RX_IDLE;
+                break;
+            }
+        }
+        else
+        {
+            assert(nb == 0);    // some bug if <0
+            
+            // all the message has been read. Convert it now to host format and queue it.
+            ClientServerL1MsgHeader* l1_hdr = &rx_msg->l1_header;
+            l1_hdr->id.u16 =     ::ntohs(l1_hdr->id.u16);
+            l1_hdr->from =   l1_hdr->from;
+            
+            // queue the message. Yield the ownership of the unique_ptr to the container.
+            rx_fifo.push_back( std:: move(rx_msg));
+            
+            // prepare for the mext message
+            rx_lenght = 0;
+        }
+    }
+    
+}
+
+bool
+MsgSocket::
+recvNextData()
+{
+    // at this point the socket received forceably some data
+    rx_state = RxState::RX_DATA;
+    
+    _recvLoop();
+
+    return !rx_fifo.empty();
+         
+}
+
+ClientServerL1MsgPtr
+MsgSocket::
+getNextReceivedMsg()
+{
+    ClientServerL1MsgPtr msg {nullptr };
+    if (!rx_fifo.empty())
+    {
+        msg = rx_fifo.front();
+        rx_fifo.pop_front();
+    }
+    return msg;
+}
+    
+MsgSocket::ErrorType 
+MsgSocket::
+_getErrorType(int err) 
+{
     /*
         EAGAIN or EWOULDBLOCK
             The socket's file descriptor is marked O_NONBLOCK and no data is waiting to be received; 
@@ -151,6 +307,7 @@ handleError()
             A connection was forcibly closed by a peer. 
         EINTR
             The recv() function was interrupted by a signal that was caught, before any data was available. 
+            Or a signal was received while blocked in the the accept() function (ansynchronous connection continuing) 
         EINVAL
             The MSG_OOB flag is set and no out-of-band data is available. 
         ENOTCONN
@@ -173,10 +330,10 @@ handleError()
      */
     MsgSocket::ErrorType err_type;
     
-    switch (errno)
+    switch (err)
     {
         /* Even if EAGAIN or EWOULDBLOCK should not happen since we rely on (p)select(), well, let it be. */
-        case EAGAIN:
+        //case EAGAIN:
         case EWOULDBLOCK:
             err_type = MsgSocket::ErrorType::IGNORE;
             break;
@@ -214,61 +371,11 @@ handleError()
 
 
 
-ClientSocket::
-connect()
-{
-    assert(sock_state == State::SOCK_NULL);
-    
-    std::cout << "Client starting connection request...";
-    
-    sock_state = State::SOCK_CONNECTING;
-    
-    int status = ::connect( socket_descr, (struct sockaddr *) &peer_ip_addr, sizeof(peer_ip_addr));
-    
-    if (status < 0)
-    {
-        if (status != EWOULDBLOCK)
-            throw("client socket's connect() error");
-    }
-    else if (status > 0)
-    {
-        sock_state = State::SOCK_CONNECTED;
-    }
-    // wait until competion of the establisment.
-    while ( sock_state == State::SOCK_CONNECTING) 
-    {
-        ::pause();  // wait for a signal
-    };
-
-    if (sock_state != State::SOCK_CONNECTED)
-    {
-        throw("Connection failure!");
-    }
-
-}
-
-
-ClientSocket::
-ClientSocket(sockaddr_in& serverAddr, std::string& ip_interface_name)
-        : MsgSocket(serverAddr, ip_interface_name)
-{
-    this->from = TransferDirection::FROM_CLIENT;
-    
-    this->socket_descr = ::socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-    
-    if (this->socket_descr < 0)
-    {
-        throw("Client's socket creation error");
-    }
-    else
-        this->socket_configuration();
-}
-
-
-
 // OBSOLETE METHODS for signals - kept here for the momment as potentially/possibly reusable.
 
-void MsgSocket::SignalSIGIOHandler(siginfo_t *pInfo) /*currently not used */
+void 
+MsgSocket::
+SignalSIGIOHandler(siginfo_t *pInfo) /*currently not used */
 {
     /*
         The following values can be placed in pInfo->si_code for a SIGIO/SIGPOLL signal:
@@ -283,7 +390,7 @@ void MsgSocket::SignalSIGIOHandler(siginfo_t *pInfo) /*currently not used */
     switch (pInfo->si_code)
     {
         case POLL_IN:
-            rxState = RxState::RX_DATA;
+            rx_state = RxState::RX_DATA;
             sock_state = State::SOCK_CONNECTED;
             break;
         case POLL_MSG:
@@ -293,25 +400,27 @@ void MsgSocket::SignalSIGIOHandler(siginfo_t *pInfo) /*currently not used */
             std::cout << " == POLL_PRI!";
             break;
         case POLL_OUT:
-            txState = TxState::TX_READY;
+            tx_state = TxState::TX_READY;
             sock_state = State::SOCK_CONNECTED;
             break;
         case POLL_ERR:
-            txState = TxState::TX_INIT;
-            rxState = RxState::RX_INIT;
+            tx_state = TxState::TX_INIT;
+            rx_state = RxState::RX_INIT;
             sock_state = State::SOCK_ERROR;
             break;
         case POLL_HUP:
-            txState = TxState::TX_INIT;
-            rxState = RxState::RX_INIT;
-            sock_state = State::SOCK_DISCONNECT;
+            tx_state = TxState::TX_INIT;
+            rx_state = RxState::RX_INIT;
+            sock_state = State::SOCK_DISCONNECTED;
             break;
         default:
             break;
     }
 }
  /*currently not used */
-void MsgSocket::SocketSignalsStaticHandler(int signalType,  siginfo_t *pInfo, void * /*currently not used */)
+void 
+MsgSocket::
+SocketSignalsStaticHandler(int signalType,  siginfo_t *pInfo, void * /*currently not used */)
 {
     switch(signalType)
     {
@@ -325,7 +434,10 @@ void MsgSocket::SocketSignalsStaticHandler(int signalType,  siginfo_t *pInfo, vo
             break;
     }
 }
-void MsgSocket::socket_configuration_SIGIO() /*currently not used */
+/*currently not used */
+void 
+MsgSocket::
+socket_configuration_SIGIO() 
 {
     int status;
     
