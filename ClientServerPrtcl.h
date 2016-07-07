@@ -14,6 +14,8 @@
 #ifndef CLIENTSERVERPRTCL_H
 #define CLIENTSERVERPRTCL_H
 
+#include <cstdint>   // int16_t, etc...
+
 /* Segment the socket flow in messages having a reasonnable size */
 #define CLIENTSERVER_MAX_L1_MSG_BODY_SIZE  (1024*8)
 
@@ -21,8 +23,36 @@
 #define CLIENTSERVER_VERSION_STRING_LENGTH  32
 #define CLIENTSERVER_USER_STRING_LENGTH  32
 #define CLIENTSERVER_USER_PASSWD_STRING_LENGTH  32
+#define CLIENTSERVER_USER_MAIL_STRING_LENGTH  128
 
 #define CLIENTSERVER_FILE_NAME_LENGTH  256
+
+
+#define CLIENTSERVER_CIPHERING_KEY_LENGTH  128   /* to_do*/
+
+using CipheringKeyData = char[CLIENTSERVER_CIPHERING_KEY_LENGTH];
+
+inline void cipheringKeyDataCopy(CipheringKeyData& to, const CipheringKeyData& from)
+{
+    const char *p1 = reinterpret_cast<const char *>(&from);
+    const char *p1e = p1+CLIENTSERVER_CIPHERING_KEY_LENGTH;
+    char *p2 = reinterpret_cast<char *>(&to);
+    
+    do 
+    {
+        *p2++ = *p1++;
+    } while (p1 != p1e);
+}
+
+/* 
+ * type of the field carrying the size of a message
+ * 2 bytes would be enough for the initial implementation where segment data is segmented into short messages. 
+ * Now, in order to not prevent different implementations of the file transfer, 4 bytes are better.
+ * allow for >64KBytes, but >2G bytes not supported. 
+ */
+using ClientServerLength_t = int32_t; 
+
+using ClientServerIdentity_t = int16_t;
 
 enum class TransferDirection 
 : unsigned char 
@@ -33,8 +63,9 @@ enum class TransferDirection
 
 
 enum class ClientServerL1MessageId 
-: unsigned short
+: ClientServerIdentity_t
 {
+    NONE = 0,
     /* L1 messages */
     CONNECTION_REQ,
     CONNECTION_CNF,
@@ -68,31 +99,45 @@ enum class ClientServerL1MessageId
 
 struct ConnectionReq
 {
-    char client_version[CLIENTSERVER_VERSION_STRING_LENGTH];
+    char client_version[CLIENTSERVER_VERSION_STRING_LENGTH];// null terminated string (last significant character is \0)
 };
 
 struct ConnectionCnf
 {
-    enum Cyphering { NO_CICPHERING };
+    enum Cyphering { NO_CICPHERING, CIPHERING_A };
     
     Cyphering       ciphering;
-    char            key[128];
+    CipheringKeyData key;
 };
 
 struct ConnectionRej
 {
-    enum Cause { IP_ADDRESS_CONFLICT, BAD_CLIENT_VERSION};
+    enum Cause { NO_CAUSE, IP_ADDRESS_CONFLICT, BAD_CLIENT_VERSION, UNEXPECTED_CONN_REQ};
     
     Cause       cause; 
     char        server_sw_version[CLIENTSERVER_VERSION_STRING_LENGTH];
 };
 
-
-
-struct RegistrationReq
+struct UserLoggingReq
 {
     char user_name[CLIENTSERVER_VERSION_STRING_LENGTH];
     char password[CLIENTSERVER_USER_PASSWD_STRING_LENGTH];
+};
+struct UserLoggingRej
+{
+    enum Cause { NO_CAUSE, USER_UNKNOWN, WRONG_PASSWORD };
+    Cause cause; 
+};
+
+struct UserLoggingCnf
+{
+};
+
+struct RegistrationReq
+{
+    char user_name[CLIENTSERVER_VERSION_STRING_LENGTH]; // null terminated string (last significant character is \0)
+    char password[CLIENTSERVER_USER_PASSWD_STRING_LENGTH];// null terminated string (last significant character is \0)
+    char mail_address[CLIENTSERVER_USER_MAIL_STRING_LENGTH];// null terminated string (last significant character is \0)
 };
 
 struct RegistrationCnf
@@ -102,7 +147,7 @@ struct RegistrationCnf
 
 struct RegistrationRej
 {
-    enum Cause { USER_ALREADY_EXISTING };
+    enum Cause { NO_CAUSE, USER_ALREADY_EXISTING, INCORRECT_EMAIL, UNEXPECTED_REGISTRATION };
     Cause cause; 
 };
 
@@ -111,11 +156,12 @@ typedef long DataTransferId;
 struct FileTransferReqHeader
 {
     
+    size_t  file_size;  // total file's size in number of bytes
+    
     DataTransferId transfer_id; // global transaction identifier
 
-    unsigned long  file_size;  // total file's size in number of bytes
     
-    unsigned short l2_action; // for private use by the L2
+    int16_t l2_action; // for private use by the L2, tbd to_do
         
     char file_name[CLIENTSERVER_FILE_NAME_LENGTH]; // 
 };
@@ -130,9 +176,8 @@ struct FileTransferReq
 struct DataTransferReqHeader
 {    
     DataTransferId transfer_id; // global transaction identifier
-    unsigned long  total_size;  // in number of bytes
-    
-    unsigned short      l2_action; // for private use by the L2        
+    size_t      total_size;  // in number of bytes
+    int16_t      l2_action; // for private use by the L2        
 };
 
 struct DataTransferReq
@@ -145,7 +190,7 @@ struct DataTransferReq
 struct DataTransferHeader
 {
     DataTransferId  transfer_id; // per client : transaction identifier
-    unsigned long  byte_position; // offest in the file of the first data byte
+    int32_t  byte_position; // offest in the file of the first data byte
 };
 
 struct DataTransferBlk
@@ -168,6 +213,10 @@ union ClientServerMsgBody
     RegistrationCnf registration_cnf;
     RegistrationRej registration_rej;
     
+    UserLoggingReq user_logging_req;
+    UserLoggingCnf user_logging_cnf;
+    UserLoggingRej user_logging_rej;
+    
     DataTransferReq     data_transfer_req;
     DataTransferBlk     data_transfer_blk;
     
@@ -178,9 +227,9 @@ union ClientServerMsgBody
 
 struct ClientServerL1MsgHeader
 {
-    unsigned long                  lenght; // allow for >64KBytes
+    ClientServerLength_t                lenght; 
     union {
-        unsigned short                  u16;  
+        ClientServerIdentity_t          val;  
         ClientServerL1MessageId         l1_msg_id;
     } id;
     TransferDirection               from;

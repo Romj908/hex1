@@ -8,10 +8,14 @@
 #include "assert.h"
 #include "util/ipUtilities.h"
 #include "ServerClientConnection.h"
+#include "main_version.h"
 
 ServerClientConnection::
 ServerClientConnection(const struct sockaddr_in &clientAddr, int clientSocket )
-: state(State::EMPTY)
+        : state(State::EMPTY), 
+        last_rejected_cause {ConnectionRej::Cause::NO_CAUSE},
+        user_pwd{},
+        user_email{}        
 {
     servSock = new ServerSocket(clientAddr, clientSocket);
 }
@@ -22,54 +26,29 @@ ServerClientConnection::
     std::cout << "\n~ServerClientContext() called";
 }
 
-void ServerClientConnection::
-deny_connection() 
-{
-    assert(state == State::EMPTY);
-    state = State::REJECTING;
-}
-
-void 
-ServerClientConnection::
-wait_authentication() 
-{
-    assert(state == State::EMPTY);
-    state = State::REGISTERING;
-}
-
-void 
-ServerClientConnection::
-remoteInitialedClose()
-{
-    // to_do
-}
-
-void 
-ServerClientConnection::
-serverInitiatedClose()
-{
-    // to_do
-}
 
 bool 
 ServerClientConnection::
 socketError()
 {
-    bool clear_io_indicators = true;
+    bool clear_io_indicators;
     
-    switch(this->servSock->handleError())
+    switch(this->servSock->_determineErrorType())
     {
         case MsgSocket::ErrorType::IGNORE:
-            clear_io_indicators = false;
+            clear_io_indicators = false; 
             break;
             
         case MsgSocket::ErrorType::DISCONNECTED:
-            /* start closure of this connection  */
+            clear_io_indicators = true; 
+            
             this->remoteInitialedClose();
             break;
             
         case MsgSocket::ErrorType::FATAL:
-            // handled by exception. We shouldn't get here.
+            clear_io_indicators = true; 
+            
+            this->fatalCnxError();
             break;
     }
     return clear_io_indicators;
@@ -85,15 +64,16 @@ socketDataRead()
     do
     {
         ClientServerL1MsgPtr p_msg = servSock->getNextReceivedMsg();
-        
+
         if (p_msg) // bool operator
         {
             handle_client_message(p_msg);
         }
         else
             break; // no more incoming message to consume
-        
+
     }while (1);
+    
 }
 
 int  
@@ -105,19 +85,264 @@ socketDataWrite()
 
 void 
 ServerClientConnection::
+sendMsgToClient(ClientServerMsgRequestUPtr&& msg_ptr)
+{
+    std::cout << "\nsendMsgToClient #" << static_cast<ClientServerIdentity_t> (msg_ptr.get()->get_l1MsgId());
+    servSock->sendMsg(std::move(msg_ptr));
+}
+
+
+void 
+ServerClientConnection::
+sendConnectionCnf(ConnectionCnf::Cyphering ciph, const CipheringKeyData& ciph_key)
+{
+    // request the sending of a ConnectionReq to the server.
+    ClientServerMsgBodyPtr l2_msg_ptr {new ClientServerMsgBody};
+    
+    l2_msg_ptr->connection_cnf.ciphering = ciph;
+    if (ciph != ConnectionCnf::Cyphering::NO_CICPHERING)
+    {
+        ::cipheringKeyDataCopy(l2_msg_ptr->connection_cnf.key, ciph_key);
+    }
+    else
+    {
+        CipheringKeyData empty_key{};
+        ::cipheringKeyDataCopy(l2_msg_ptr->connection_cnf.key, empty_key);
+    }
+    
+    auto send_msg_req_p = new ClientServerMsgRequest(l2_msg_ptr, sizeof(ConnectionCnf), 
+                                                     ClientServerL1MessageId::CONNECTION_CNF);
+    
+    ClientServerMsgRequestUPtr req {send_msg_req_p};
+    
+    this -> sendMsgToClient(std::move(req));
+    
+}
+
+void 
+ServerClientConnection::
+sendConnectionRej(ConnectionRej::Cause cause)
+{
+    // request the sending of a ConnectionReq to the server.
+    ClientServerMsgBodyPtr l2_msg_ptr {new ClientServerMsgBody};
+    
+    l2_msg_ptr->connection_rej.cause = cause;
+    
+    auto send_msg_req_p = new ClientServerMsgRequest(l2_msg_ptr, sizeof(ConnectionRej), 
+                                                     ClientServerL1MessageId::CONNECTION_REJ);
+    
+    ClientServerMsgRequestUPtr req {send_msg_req_p};
+    
+    this -> sendMsgToClient(std::move(req));
+    
+}
+
+
+void 
+ServerClientConnection::
+handleConnectionReq(ClientServerL1MsgPtr p_msg) 
+{
+    std::cout << "\nCONNECTION_REQ, client version " << &p_msg->l1_body.connection_req.client_version[0];
+    
+    if (state == State::EMPTY)
+    {
+        // ensure that the last char of client_version[] is well '\0'
+        p_msg->l1_body.connection_req.client_version[CLIENTSERVER_VERSION_STRING_LENGTH-1] = 0;
+        
+        // copy the version into a std::string for manipulations.
+        std::string client_str{&p_msg->l1_body.connection_req.client_version[0]};
+        
+        if (client_str  == mainVersionString())
+        {
+            /* normal path */
+            CipheringKeyData dummy_ciph_key{};    // to_do ciphering to be implemented
+            sendConnectionCnf(ConnectionCnf::Cyphering::NO_CICPHERING, dummy_ciph_key );
+            state = State::REGISTERING;
+        }
+        else
+        {
+            this ->last_rejected_cause = ConnectionRej::Cause::BAD_CLIENT_VERSION;
+            sendConnectionRej(this ->last_rejected_cause);
+            state = State::CONN_REJECTED;
+        }
+    }
+    else if (state == State::CONN_REJECTED)
+    {
+        // abnormal situation
+        sendConnectionRej(this ->last_rejected_cause);
+        state = State::CONN_REJECTED;
+    }
+    else 
+    {
+        // abnormal situation
+        this ->last_rejected_cause = ConnectionRej::Cause::UNEXPECTED_CONN_REQ;
+        sendConnectionRej(this ->last_rejected_cause);
+        state = State::CONN_REJECTED;
+    }
+}
+
+bool known_user(const std::string& user_name )
+{
+    // look into files or DB
+    //...
+    return false; // to_do
+}
+
+bool known_email(const std::string& user_email )
+{
+    // look into files or DB
+    //...
+    return false; // to_do
+}
+
+bool correct_email(const std::string& user_email )
+{
+    // look into files or DB
+    //...
+    return false; // to_do
+}
+
+void 
+ServerClientConnection::
+sendRegistrationRej(RegistrationRej::Cause cause)
+{
+    // request the sending of a ConnectionReq to the server.
+    ClientServerMsgBodyPtr l2_msg_ptr {new ClientServerMsgBody};
+    
+    l2_msg_ptr->registration_rej.cause = cause;
+    
+    auto send_msg_req_p = new ClientServerMsgRequest(l2_msg_ptr, sizeof(RegistrationRej), 
+                                                     ClientServerL1MessageId::REGISTRATE_REJ);
+    
+    ClientServerMsgRequestUPtr req {send_msg_req_p};
+    
+    this -> sendMsgToClient(std::move(req));
+    
+}
+
+void 
+ServerClientConnection::
+sendRegistrationCnf()
+{
+    // request the sending of a ConnectionReq to the server.
+    ClientServerMsgBodyPtr l2_msg_ptr {new ClientServerMsgBody};
+        
+    auto send_msg_req_p = new ClientServerMsgRequest(l2_msg_ptr, sizeof(RegistrationCnf), 
+                                                     ClientServerL1MessageId::REGISTRATE_CNF);
+    
+    ClientServerMsgRequestUPtr req {send_msg_req_p};
+    
+    this -> sendMsgToClient(std::move(req));
+    
+}
+
+
+void 
+ServerClientConnection::
+handleRegistrationReq(ClientServerL1MsgPtr p_msg) 
+{
+    if (state == State::REGISTERING)
+    {
+        /* normal path */
+        
+        auto p_name = reinterpret_cast<char*>(p_msg->l1_body.registration_req.user_name);
+        p_name[CLIENTSERVER_VERSION_STRING_LENGTH-1] = 0; // ensure it's a regular string.
+        this ->user_name = std::string{p_name};
+        
+        auto p_email = reinterpret_cast<char*>(p_msg->l1_body.registration_req.mail_address);
+        p_email[CLIENTSERVER_USER_MAIL_STRING_LENGTH-1] = 0; // ensure it's a regular string.
+        this ->user_name = std::string{p_email};
+
+        /* check if that user name is already registered */
+        if (known_user(this ->user_name))
+        {
+            // name already existing!
+            sendRegistrationRej(RegistrationRej::Cause::USER_ALREADY_EXISTING);
+            state = State::REJECTED;            
+        }
+        else if (correct_email(p_email))
+        {
+            // bad mail format!
+            sendRegistrationRej(RegistrationRej::Cause::INCORRECT_EMAIL);
+            state = State::REJECTED;                        
+        }
+        else
+        {
+            /* normal path */
+            sendRegistrationCnf();
+            state = State::REGISTERED;            
+        }
+        
+    }
+    else
+    {
+        // abnormal situation
+        sendRegistrationRej(RegistrationRej::Cause::UNEXPECTED_REGISTRATION);
+        state = State::REJECTED;                        
+    }
+}
+
+void 
+ServerClientConnection::
+handleUserLogginReq(ClientServerL1MsgPtr p_msg) 
+{
+    if (state == State::REGISTERING)
+    {
+        /* normal path */
+        this ->user_name = std::string{p_msg->l1_body.registration_req.user_name};
+        /* check if that user is registered */
+    }
+    else
+    {
+        // abnormal situation
+    }
+}
+
+void 
+ServerClientConnection::
+remoteInitialedClose()
+{
+    std::cout << "\nremoteInitialedClose Client connection #" << this->servSock;
+    this->servSock->stop();
+    state = State::DISCONNECTED;
+}
+
+void 
+ServerClientConnection::
+fatalCnxError()
+{
+    std::cout << "\fatalCnxError Client connection #" << this->servSock;
+    this->servSock->stop();
+    state = State::CNX_ERROR;
+}
+
+
+void 
+ServerClientConnection::
+serverInitiatedClose()
+{
+    // to_do
+}
+
+void 
+ServerClientConnection::
 handle_client_message(ClientServerL1MsgPtr p_msg)
 {
     //using ClientServerL1MessageId;
+    std::cout << "\nhandle_client_message " << p_msg->l1_header.id.val;
     
     switch (p_msg->l1_header.id.l1_msg_id)
     {
         case ClientServerL1MessageId::CONNECTION_REQ:
+            handleConnectionReq(p_msg);
             break;
             
         case ClientServerL1MessageId::LOGGING_REQ:
+            handleUserLogginReq(p_msg);
             break;
 
         case ClientServerL1MessageId::REGISTRATE_REQ:
+            handleRegistrationReq(p_msg);
             break;
 
         case ClientServerL1MessageId::DISCONNECT_REQ:
@@ -159,11 +384,13 @@ ServerSocketsRouter *ServerSocketsRouter::serverSockRouterObject;
 
 ServerSocketsRouter::
 ServerSocketsRouter()
+: dead_list{}, socket_map{}
 {
     nb_client_connections = 0;
     clientsocks_nfds = 0;
     FD_ZERO(&clientsocks_fds);
     ::sigemptyset(&select_sigmask);
+
     
 }
 
@@ -171,6 +398,7 @@ ServerClientCnxPtr
 ServerSocketsRouter::
 CreateClientConnection(struct sockaddr_in &clientAddr, hex1::socket_d  clientSock)
 {
+    std::cout << "\nCreating Client connection #" << clientSock;
     // check the validity of the socket descriptor;
     if (FD_ISSET(clientSock, &clientsocks_fds) )
     {
@@ -192,9 +420,9 @@ CreateClientConnection(struct sockaddr_in &clientAddr, hex1::socket_d  clientSoc
     
             /* Note that the created (temporary) pair object is "moved" to the
              internal ::map data thanks to the 2011+ following definition of map::insert():
-                std::pair<iterator, bool>
-                insert(const value_type& __x)
-                { return _M_t._M_insert_unique(__x); }
+                        std::pair<iterator, bool>
+                        insert(_Pair&& __x)
+                        { return _M_t._M_insert_unique(std::forward<_Pair>(__x)); }
              * 
              *    having in the _Rb_tree::_M_insert_unique() defined as an universal reference:
                  #if __cplusplus >= 201103L
@@ -202,7 +430,8 @@ CreateClientConnection(struct sockaddr_in &clientAddr, hex1::socket_d  clientSoc
                 #else
              *      ...
              * std::make_pair(clientSock,new_client) returning a rvalue, the universal reference decays to rvalue.
-             * In other words, no reference is kept by the map object on some external object.
+             * then the emptied temporary pair, on the stack, is deleted after to have been moved.
+             * In other words, no reference is kept by the map object on some external pair object.
              */
     
     if (!inserted.second)
@@ -218,10 +447,9 @@ CreateClientConnection(struct sockaddr_in &clientAddr, hex1::socket_d  clientSoc
 
 void
 ServerSocketsRouter::
-ReleaseClientConnection(ServerClientCnxPtr the_cnx)
+ReleaseClientConnection(hex1::socket_d clientSock)
 {
-    int clientSock = the_cnx->get_socket_descr();
-    
+    std::cout << "\nReleasing Client connection #" << clientSock;
     FD_CLR(clientSock, &clientsocks_fds);
     FD_CLR(clientSock, &select_writefds);
     
@@ -334,10 +562,23 @@ _serveSocketReceptions(SocketList &the_list )
     {
         // route to the corresponding connection object. 
         ServerClientCnxPtr  client_cnx_ptr = socket_map.at(socket);
+        try
+        {
+
+            // read incomig data and if complete messages have been received, handle them.
+            client_cnx_ptr->socketDataRead();
+            nb++;  // the current one.
+        }
         
-        // read incomig data and if complete messages have been received, handle them.
-        client_cnx_ptr->socketDataRead();
-        nb++;  // the current one.
+        catch (peer_disconnection disc)
+        {
+            std::cout << disc << " on connection #" << socket;
+            client_cnx_ptr -> remoteInitialedClose();
+            dead_list.push_back(socket);
+            
+            nb++;  // the current one.
+            /*throw*/; // DON'T propagate the exception to higher level!
+        }
     }    
     return nb; // return the number of descriptors which have been handled.
 }
@@ -351,14 +592,26 @@ _serveSocketEmissions(SocketList &the_list )
     {
         // route to the corresponding connection object. 
             ServerClientCnxPtr  client_cnx_ptr = socket_map.at(socket); // throw std::out_of_range
-            
-            int again = client_cnx_ptr->socketDataWrite();
-            if (!again)
+            try
             {
-                // this socket has currently no more data waiting to be sent. 
-                FD_CLR(socket, &select_writefds);
+                int again = client_cnx_ptr->socketDataWrite();
+                if (!again)
+                {
+                    // this socket has currently no more data waiting to be sent. 
+                    FD_CLR(socket, &select_writefds);
+                }
+                
             }
-        nb++;  // for the current socket's emission.
+            catch (peer_disconnection disc)
+            {
+                std::cout << disc << " on connection #" << socket;
+                client_cnx_ptr -> remoteInitialedClose();
+                dead_list.push_back(socket);
+
+                nb++;  // the current one.
+                /*throw*/; // DON'T propagate the exception to higher level!
+            }
+         nb++;  // for the current socket's emission.
     }    
     return nb; // return the number of descriptors which have been handled.
 }
@@ -390,7 +643,7 @@ ServeClientSockets(void)
         
         int nb_act = ::pselect(clientsocks_nfds, 
                                 &select_readfds, 
-                                &select_writefds, // 
+                                &select_writefds,
                                 &select_errorfds, 
                                 &select_timeout, 
                                 nullptr /*&select_sigmask*/);
@@ -421,10 +674,20 @@ ServeClientSockets(void)
         catch (std::out_of_range)
         {
             // a socket descriptor not found!? There is a bug somewhere.
+            std::cout << "\nServeClientSockets out_of_range exception!";
             throw;
         }
         
         assert(nb_act == 0);
-
+        
+        /* delete the connection objects that have experienced fatal errors or remote disconnections.*/
+        if (! this->dead_list.empty())
+        {
+            for (auto sock_desc : this -> dead_list)
+            {
+                ReleaseClientConnection(sock_desc);
+            }
+            this -> dead_list.clear();
+        }
 }
 

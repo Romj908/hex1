@@ -92,6 +92,9 @@ public:
         
     virtual ~ClientServerMsgRequest() = default;
     
+    ClientServerL1MessageId
+    get_l1MsgId() { return l1_msg_id; }
+    
 private:
     ClientServerMsgRequest(const ClientServerMsgRequest& orig) = delete;
 

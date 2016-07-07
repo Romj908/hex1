@@ -22,6 +22,14 @@
 
 #include "MsgSocket.h"
 
+std::ostream& operator<< (std::ostream& o, const peer_disconnection& obj)
+{
+    std::string str1 {" errno: "};    
+    o << std::endl << obj.err_msg << str1 << obj.sys_errno << std::flush;
+    return o;
+}
+
+
 
 MsgSocket::
 MsgSocket(const struct sockaddr_in &serverAddr, 
@@ -34,11 +42,56 @@ MsgSocket(const struct sockaddr_in &serverAddr,
         rx_msg(nullptr)
 {
     sock_state = State::SOCK_NULL;
+    this -> _rxReset();
+    this -> _txReset();
+}
+
+void
+MsgSocket::
+_setState(State    new_state) 
+{
+    sock_state = new_state; 
+}
+
+void
+MsgSocket::
+_txReset()
+{
     tx_state = TxState::TX_INIT;
+    tx_length = 0;
+    tx_msg_length = 0;
+    tx_msg.reset();
+    tx_l1_msg_id = ClientServerL1MessageId::NONE;
+}
+
+void
+MsgSocket::
+_rxReset()
+{
     rx_state = RxState::RX_INIT;
     rx_lenght = 0;
-    tx_length = 0;
-    tx_msg.reset();
+    
+}
+void
+MsgSocket::
+discardDataBuffers()
+{
+    this -> _txReset();
+    rx_fifo.clear();
+    
+    this -> _rxReset();
+    tx_fifo.clear();
+    
+    std::cout << "\nSocket queues have been cleared.";
+}
+
+void
+MsgSocket::
+stop()
+{
+    std::cout << "\nMsgSocket::stop";
+    this -> discardDataBuffers();
+    sock_state = State::SOCK_NULL;
 }
 
 void 
@@ -61,7 +114,23 @@ MsgSocket::
 _socketSend(char *buffer, int buffer_length, int flags)
 {
     ssize_t nb_sent = ::send(this->socket_descr, buffer, buffer_length, flags);
-    assert(nb_sent == sizeof(tx_header) || nb_sent == EWOULDBLOCK);
+    if (nb_sent < 0)
+    {
+        nb_sent = -errno;
+        if ( nb_sent == -EWOULDBLOCK)
+        {
+            tx_state = TxState::TX_BUSY;
+            std::cout << "MsgSocket::_socketSend TxState <- TX_BUSY";
+        }
+        else
+        {
+            if (_getTxErrorType(errno) == ErrorType::DISCONNECTED)
+            {
+                throw peer_disconnection{"MsgSocket::_socketSend", errno};                
+            }
+        }
+    }
+    
     return nb_sent;
 }
 
@@ -71,40 +140,40 @@ _sendLoop()
 {
     ClientServerRequestPtr req_ptr = tx_fifo.front();
     ssize_t nb_sent;
+    int length = 0;
     
     while (tx_state == TxState::TX_READY && !tx_fifo.empty())
     {
+        
         if (req_ptr->someDataToSend())
         {
             if (!tx_msg) // bool operator.
             {
                 // retrieve the next L1 message 
-                ClientServerL1MessageId l1_msg_id;
                 int length = 0;
-                tx_msg = req_ptr->buildNextL2Msg(l1_msg_id, length);
+                tx_msg = req_ptr->buildNextL2Msg(tx_l1_msg_id, length);
+                std::cout << "MsgSocket::_sendLoop() next msg:" << static_cast<unsigned short>(tx_l1_msg_id) <<" length:"<< length<< std::endl;
+                tx_msg_length = length+sizeof(tx_header);
                 // knowing the length of the message we can build the L1 header
-                tx_header.id.u16   = htons(static_cast<uint16_t>(l1_msg_id));
-                tx_header.lenght = htonl(length+sizeof(tx_header));  // total lenght of the message 
-                tx_header.from = this->from;
+                tx_header.id.val   = htons(static_cast<ClientServerIdentity_t>(tx_l1_msg_id));
+                tx_header.lenght = htonl(tx_msg_length);  // total lenght of the message 
+                tx_header.from = this->from;  // one single byte.
             }
             if (tx_length == 0)
             {
                 // send the L1 header
                 nb_sent = _socketSend(reinterpret_cast<char *>(&tx_header), sizeof(tx_header));
-                
-                if ( nb_sent == EWOULDBLOCK)
+                if (nb_sent < 0)
                 {
-                    tx_state = TxState::TX_BUSY;
                     break; // leave the while()
                 }
                 else
                     tx_length += nb_sent;
             }
-            nb_sent = tx_length < tx_header.lenght;
-            if (nb_sent > 0)
+            if (tx_length < tx_msg_length)
             {
                 // send the rest of the message
-                nb_sent = _socketSend(reinterpret_cast<char *>(tx_msg.get()), nb_sent);
+                nb_sent = _socketSend(reinterpret_cast<char *>(tx_msg.get()), tx_msg_length - tx_length );
                 if ( nb_sent == EWOULDBLOCK)
                 {
                     tx_state = TxState::TX_BUSY;
@@ -113,22 +182,22 @@ _sendLoop()
                 else
                 {
                     tx_length += nb_sent;
-                    assert(tx_length <= tx_header.lenght);
                 }
             }
-            if (tx_length == tx_header.lenght)
+            if (tx_length == tx_msg_length)
             {
+                std::cout << "MsgSocket::_sendLoop() completed msg " << static_cast<unsigned short>(tx_l1_msg_id);
                 // the current message has been fully sent. Prepare to request the next one.
-                tx_msg.reset();      // release the pointer.
-                tx_length = 0;
+                _txReset();      
             }
         }
         else
         {
             // request has been served. Prepare move to the next one. 
+            assert(tx_length == 0);    // we must have fully sent the precedent message. 
+            assert(tx_msg_length == 0);      
             tx_fifo.pop_front(); // remove the element from the pending queue
-            tx_msg.reset();      // release the pointer.
-            tx_length = 0;
+            tx_l1_msg_id = ClientServerL1MessageId::NONE;
         }
         
     }
@@ -142,7 +211,17 @@ sendNextData()
     // at this point the socket is forceably ready to send, so its state is indicated as write-ready
     tx_state = TxState::TX_READY;
     
-    _sendLoop();
+    try
+    {
+        _sendLoop();    
+    }
+    catch (peer_disconnection tx_disc)
+    {
+        std::cout << ref(tx_disc);
+        std::cout << " MsgSocket::sendNextData()";
+        this -> discardDataBuffers();
+        throw;
+    }
     
     if (tx_fifo.empty())
         return 0;
@@ -173,8 +252,17 @@ _socketReceive(char *buffer, int buffer_length, int flags)
     
     if (nb_bytes <0)
     {
-        nb_bytes = errno;
-        assert(nb_bytes == EWOULDBLOCK);
+        if (_getRxErrorType(errno)== MsgSocket::ErrorType::IGNORE)
+        {
+            nb_bytes = -errno;  // negative value returned
+        }
+        else
+        {
+            if (_getRxErrorType(errno) == ErrorType::DISCONNECTED)
+            {
+                throw peer_disconnection{"_socketReceive unexpected error", errno};                
+            }
+        }
     }
     return nb_bytes;
 }
@@ -187,17 +275,17 @@ _recvBeginNewMsg(void)
     
     // read the length of the next message.
     int flags = MSG_PEEK;
-    unsigned long lenght;
+    ClientServerLength_t lenght;
     int nb_recv = _socketReceive(reinterpret_cast<char *>(&lenght), sizeof(lenght), flags);
-    if (nb_recv > 0 )
+    if (nb_recv == sizeof(lenght) )
     {
         // Successfully reading. Definitely consume these bytes (wiothout MSG_PEEK).
-        _socketReceive(reinterpret_cast<char *>(&lenght), sizeof(lenght));
+        nb_recv = _socketReceive(reinterpret_cast<char *>(&lenght), sizeof(lenght));
+        assert(nb_recv == sizeof(lenght));
         
         // allocate a new l1 msg buffer and set its lenght field.
         p_msg.reset(new ClientServerL1Msg);
         p_msg->l1_header.lenght = ::ntohl(lenght);
-        
         // initialize the number of bytes read.
         this->rx_lenght = sizeof(lenght);
         
@@ -228,12 +316,14 @@ _recvLoop()
                 rx_state == RxState::RX_IDLE;
                 break;
             }
+            std::cout << "\nMsgSocket::_recvLoop() next msg length:"<< rx_msg->l1_header.lenght << std::endl;
         }
         // if not all messages have been received request the rest of the message.
-        int nb = rx_lenght <= rx_msg->l1_header.lenght;
+        int nb = rx_msg->l1_header.lenght - rx_lenght;
         if (nb > 0)
         {
             char *raw = reinterpret_cast<char *>(rx_msg.get());
+            raw += rx_lenght;
             nb = _socketReceive(raw, nb);  
             if (nb > 0)  // number of bytes effectively received.
             {
@@ -242,19 +332,20 @@ _recvLoop()
             else 
             {
                 // all bytes have been read, or an error occured.
-                assert(nb == EWOULDBLOCK);
+                int err = errno;
+                assert(errno == EWOULDBLOCK);
                 rx_state == RxState::RX_IDLE;
                 break;
             }
         }
         else
         {
-            assert(nb == 0);    // some bug if <0
-            
+            assert(nb == 0);    //  bug if <0
             // all the message has been read. Convert it now to host format and queue it.
             ClientServerL1MsgHeader* l1_hdr = &rx_msg->l1_header;
-            l1_hdr->id.u16 =     ::ntohs(l1_hdr->id.u16);
-            l1_hdr->from =   l1_hdr->from;
+            l1_hdr->id.val =     ntohs(l1_hdr->id.val);
+            std::cout << "\nMsgSocket::_recvLoop() msg msg id=" << l1_hdr->id.val << std::flush;
+            //l1_hdr->from is one single byte.
             
             // queue the message. Yield the ownership of the unique_ptr to the container.
             rx_fifo.push_back( std:: move(rx_msg));
@@ -273,8 +364,16 @@ recvNextData()
     // at this point the socket received forceably some data
     rx_state = RxState::RX_DATA;
     
-    _recvLoop();
-
+    try
+    {
+        _recvLoop();    
+    }
+    catch (peer_disconnection rx_disc)
+    {
+        std::cout << rx_disc << " MsgSocket::recvNextData() disconnection";
+        this -> discardDataBuffers();
+        throw;
+    }
     return !rx_fifo.empty();
          
 }
@@ -294,7 +393,7 @@ getNextReceivedMsg()
     
 MsgSocket::ErrorType 
 MsgSocket::
-_getErrorType(int err) 
+_getRxErrorType(int err) 
 {
     /*
         EAGAIN or EWOULDBLOCK
@@ -369,6 +468,124 @@ _getErrorType(int err)
     return err_type;
 }
 
+MsgSocket::ErrorType 
+MsgSocket::
+_getTxErrorType(int err) 
+{
+    /*
+
+        EAGAIN or EWOULDBLOCK
+
+            The socket's file descriptor is marked O_NONBLOCK and the requested operation would block. 
+        EBADF
+            The socket argument is not a valid file descriptor. 
+     * 
+        ECONNRESET
+            A connection was forcibly closed by a peer. 
+     * 
+        EDESTADDRREQ
+            The socket is not connection-mode and no peer address is set. 
+        EINTR
+            A signal interrupted send() before any data was transmitted. 
+        EMSGSIZE
+            The message is too large to be sent all at once, as the socket requires. 
+        ENOTCONN
+            The socket is not connected or otherwise has not had the peer pre-specified. 
+        ENOTSOCK
+            The socket argument does not refer to a socket. 
+        EOPNOTSUPP
+            The socket argument is associated with a socket that does not support one or more of the values set in flags. 
+        EPIPE
+            The socket is shut down for writing, or the socket is connection-mode and is no longer connected. 
+            In the latter case, and if the socket is of type SOCK_STREAM, the SIGPIPE signal is generated to the calling thread.
+
+        The send() function may fail if:
+
+        EACCES
+            The calling process does not have the appropriate privileges. 
+        EIO
+            An I/O error occurred while reading from or writing to the file system. 
+        ENETDOWN
+            The local network interface used to reach the destination is down. 
+        ENETUNREACH
+
+            No route to the network is present. 
+        ENOBUFS
+            Insufficient resources were available in the system to perform the operation.
+         */
+    MsgSocket::ErrorType err_type;
+    
+    switch (err)
+    {
+        /* Even if EAGAIN or EWOULDBLOCK should not happen since we rely on (p)select(), well, let it be. */
+        //case EAGAIN:
+        case EWOULDBLOCK:
+            err_type = MsgSocket::ErrorType::IGNORE;
+            break;
+
+        case EMSGSIZE:
+            err_type = MsgSocket::ErrorType::IGNORE;
+            break;
+            
+        /* Problem with the remote end. Better to release that connection and to wait for a reconnection from it. */
+        case ECONNRESET:
+        case ENOTCONN:
+        case ETIMEDOUT:
+        case EDESTADDRREQ:
+        case EPIPE:
+        case ENETDOWN:  // cable disconnected...
+        case ENETUNREACH:// cable disconnected ? ...
+            err_type =  MsgSocket::ErrorType::DISCONNECTED;
+            break;
+
+        /* Abnormal system errors*/
+        case EIO:     // ??
+        case ENOBUFS: // should never occur under normal conditions.
+        case ENOMEM:  // should never occur under normal conditions.
+            err_type =  MsgSocket::ErrorType::FATAL;
+            break;
+            
+
+        /* Abnormal cases - Bugs */
+        case EBADF:
+        case EINTR:
+        case EINVAL:
+        case ENOTSOCK:
+        case EOPNOTSUPP:
+        default:     
+            err_type =  MsgSocket::ErrorType::FATAL;
+            break;
+    }
+
+    return err_type;
+}
+
+MsgSocket::ErrorType 
+MsgSocket::
+_determineErrorType()
+{
+    if (sock_state == State::SOCK_DISCONNECTED)
+        return MsgSocket::ErrorType::DISCONNECTED;
+    
+    /* the POSIX recvmsg() has top be used to know the error type. */
+    char iobuffer[UIO_MAXIOV];
+    struct iovec dummy_iovec = {.iov_base = iobuffer, .iov_len = UIO_MAXIOV };
+    struct msghdr msg_hdr;
+    msg_hdr.msg_iov = &dummy_iovec;
+    msg_hdr.msg_iovlen = 1;
+    msg_hdr.msg_name = nullptr;     // because not an UDP stream
+    msg_hdr.msg_namelen = 0;        // because not an UDP stream
+    msg_hdr.msg_control = nullptr;
+    msg_hdr.msg_controllen = 0;
+    
+    ssize_t err = ::recvmsg(socket_descr, &msg_hdr, MSG_PEEK );
+    
+    // an error is expected on that socket, so -1 is expected.
+    if (err == -1)
+        return _getRxErrorType(errno);// usual errno.
+    else
+        return MsgSocket::ErrorType::IGNORE; // to be clarified
+}
 
 
 // OBSOLETE METHODS for signals - kept here for the momment as potentially/possibly reusable.

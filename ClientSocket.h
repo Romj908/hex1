@@ -31,10 +31,10 @@ public:
     virtual ~ClientSocket();
     
     virtual MsgSocket::ErrorType 
-    handleError() override;
-
+    _getRxErrorType(int sock_err) override;   // virtual since server and clients may behave diferently.
+    
     virtual MsgSocket::ErrorType 
-    _getErrorType(int sock_err) override;
+    _getTxErrorType(int sock_err) override;   // virtual since server and clients may behave diferently.
     
     // methods specific to the client mode.
     void connect();
@@ -43,9 +43,15 @@ public:
      * check whether some data can be sent or if some new data have been received 
      * Returns whether new message(s) have been received 
      */
-    bool pool();
+    bool poll();
     
-    
+protected:
+//    virtual MsgSocket::ErrorType 
+//    _determineErrorType() override;
+
+    virtual void
+    _setState(State    new_state) override;
+        
 };
 
 

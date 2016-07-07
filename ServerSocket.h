@@ -29,11 +29,11 @@ public:
     ServerSocket(const sockaddr_in &serverAddr, int sock_descr);
     virtual ~ServerSocket();
         
-    virtual MsgSocket::ErrorType 
-    handleError() override;
+//    virtual MsgSocket::ErrorType 
+//    _determineErrorType() override;
 
     virtual MsgSocket::ErrorType 
-    _getErrorType(int sock_err) override;
+    _getRxErrorType(int sock_err) override;
     // methods specific to the server mode.
 
 };

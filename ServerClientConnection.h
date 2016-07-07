@@ -27,10 +27,12 @@ class ServerClientConnection
 {
     enum class State {
         EMPTY,
-        REJECTING,
-        REGISTERING,
-        CONNECTED,
-        ERROR,
+        CNX_ERROR,
+        DISCONNECTED,
+        CONN_REJECTED,
+        REGISTERING,     // loging procedure or signing procedure expected
+        REJECTED,        // authentication failure (login procedure failure)
+        REGISTERED,      // user has logged in or signed in.
         CLOSING
     };
 
@@ -40,6 +42,12 @@ class ServerClientConnection
     ServerSocket *servSock;
     
     struct sockaddr_in  ipAddr;
+    
+    std::string user_email;
+    std::string user_pwd;
+    std::string user_name;
+    
+    ConnectionRej::Cause last_rejected_cause;
     
 public:
     //ServerSocketsRouter();
@@ -52,10 +60,20 @@ public:
     in_addr_t get_in_addr_t() const {return ipAddr.sin_addr.s_addr; }
     int       get_socket_descr() const {return servSock->getSocketDescr();}
     
-    void deny_connection();
-    void wait_authentication();
+    const std::string& get_user_name() const { return user_name; } 
     
+    void deny_connection();
+    void handleConnectionReq(ClientServerL1MsgPtr p_msg);
+    void handleRegistrationReq(ClientServerL1MsgPtr p_msg);
+    void handleUserLogginReq(ClientServerL1MsgPtr p_msg);
+    void sendMsgToClient(ClientServerMsgRequestUPtr&& msg_ptr);
+
     void handle_client_message(ClientServerL1MsgPtr msg); // analyse the received message and route it accordingly
+    
+    void sendConnectionCnf(ConnectionCnf::Cyphering ciph, const CipheringKeyData& ciph_key);
+    void sendConnectionRej(ConnectionRej::Cause cause);
+    void sendRegistrationCnf();
+    void sendRegistrationRej(RegistrationRej::Cause cause);
     
     bool socketError();  // An error occured on that connection. Handle it accordingly
     void socketDataRead();   // some incoming data have to be read
@@ -63,6 +81,8 @@ public:
     
     void serverInitiatedClose();      // main server originated closure. Should rarely happen. Enter CLOSING state. 
     void remoteInitialedClose();      // Remote client has closed the socket.  and .
+    void fatalCnxError();
+    
 private:
     void _release();   // socket has been closed or was in error. Deregistering the connection. The object is going to be destroyed.
 
@@ -86,10 +106,13 @@ class ServerSocketsRouter
     typedef std::list<hex1::socket_d>                     SocketList;
     typedef SocketList::iterator                          SocketListIterator;
     
-    /* map to retrieve the ServerClient bject in charge of a socket whose file descriptor is given. */
+    /* map to retrieve the ServerClient object in charge of a socket whose file descriptor is given. */
     SocketMap socket_map;
     
     int nb_client_connections;   // For clarity, but always equal to the number of elts in socket_map.
+    
+    /* map to temporarily store the file descriptors of fallen connections (disconnection, errors). */
+    SocketList  dead_list;
     
     // permanent bitmap of existing sockets, in the same format than for the call to ::pselect().
     // The server's listening socket doesn't appear in them.
@@ -156,13 +179,10 @@ public:
     CreateClientConnection(struct sockaddr_in &clientAddr,  hex1::socket_d clientSock);
     
     void 
-    ReleaseClientConnection(ServerClientCnxPtr the_cnx);
+    ReleaseClientConnection(hex1::socket_d clientSock);
     
     void
     ServeClientSockets();
-    
-     
-    
     
 };
 

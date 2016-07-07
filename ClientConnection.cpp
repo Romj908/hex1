@@ -8,12 +8,14 @@
 #include <iostream>
 #include <memory>
 #include <fcntl.h>
+#include <string.h>
 #include <unistd.h>// getpid()
 
 #include "hex1Protocol.h"
 
 #include "gameClient.h"
 #include "ClientConnection.h"
+#include "main_version.h"
 
 ClientConnection *ClientConnection::clientModeConnection = nullptr;
 
@@ -113,6 +115,7 @@ ClientConnection(const struct sockaddr_in &serverAddr,
         ip_interface_name{ip_interface_name}
 {
         server_ip_addr = serverAddr;
+        this -> configureSocket();
 }
 
 void 
@@ -140,21 +143,62 @@ configureSocket()
 
 void 
 ClientConnection::
+startConnection()
+{
+    // request the sending of a ConnectionReq to the server.
+    ClientServerMsgBodyPtr l2_msg_ptr {new ClientServerMsgBody};
+    ::memset(l2_msg_ptr->connection_req.client_version, 0, CLIENTSERVER_VERSION_STRING_LENGTH);
+    
+    ::strcpy(l2_msg_ptr->connection_req.client_version, mainVersionString().c_str());
+        
+    auto send_msg_req_p = new ClientServerMsgRequest(l2_msg_ptr, sizeof(ConnectionReq), 
+                                                     ClientServerL1MessageId::CONNECTION_REQ);
+    
+    ClientServerMsgRequestUPtr req {send_msg_req_p};
+    
+    this -> sendMsgToServer(std::move(req));
+    
+}
+
+void
+ClientConnection::
+peerDisconnected()
+{
+    setState(CnxState::NO_CONNECTION);
+    
+    // all outgoing/incoming data have already been flushed by the socket
+}
+
+void 
+ClientConnection::
 poll(void)
 {
-    // handle 
-    bool incoming_msg = clientSocket->pool();
-    
-    if (incoming_msg)
+    if (cnx_state <= CnxState::NO_CONNECTION)
     {
-        ClientServerL1MsgPtr msg;
-        do
+        return;
+    }
+    
+    try
+    {
+        bool incoming_msg = clientSocket->poll();
+
+        if (incoming_msg)
         {
-            msg = clientSocket->getNextReceivedMsg();
-            
-            handle_server_message(msg);
-            
-        } while (msg);
+            std::cout << "\nClientConnection::poll incoming_msg";
+            ClientServerL1MsgPtr msg;
+            do
+            {
+                msg = clientSocket->getNextReceivedMsg();
+
+                handle_server_message(msg);
+
+            } while (msg);
+        }
+    }
+    catch (peer_disconnection disc)
+    {
+        peerDisconnected();
+        throw; // propagate the exception to higher level
     }
     
 }
@@ -165,6 +209,14 @@ ClientConnection::
 user_registration()
 {
 }
+
+void 
+ClientConnection::
+sendMsgToServer(ClientServerMsgRequestUPtr&& msg_ptr)
+{
+    clientSocket->sendMsg(std::move(msg_ptr));
+}
+
 
 
 

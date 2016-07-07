@@ -17,6 +17,7 @@
 #include <signal.h>
 #include <deque>  
 #include <exception>  
+#include <iostream>
 #include "ClientServerRequest.h"
 
 /*
@@ -28,11 +29,11 @@ class MsgSocket
 {
 protected:
     enum class State {
-        SOCK_NULL,
+        SOCK_NULL = 0,
+        SOCK_ERROR = 1,
+        SOCK_DISCONNECTED = 2, // must be > SOCK_ERROR
         SOCK_CONNECTING,   // state not used when on server side.
         SOCK_CONNECTED,
-        SOCK_ERROR,
-        SOCK_DISCONNECTED
     };
     
     State    sock_state;
@@ -56,6 +57,8 @@ protected:
     
     TxState                     tx_state;
     int                         tx_length;   // number of bytes of the current message that have been sent 
+    int                         tx_msg_length;     // length, in number of bytes, of the current message, inluding the l1 header 
+    ClientServerL1MessageId     tx_l1_msg_id;
     ClientServerMsgBodyPtr      tx_msg;      // pointer to the current L1 message's body under emission.
     ClientServerL1MsgHeader     tx_header;   // l1 message's L1 header
     
@@ -116,18 +119,28 @@ public:
     virtual ClientServerL1MsgPtr
     getNextReceivedMsg();
     
+    virtual void
+    discardDataBuffers();
+    
+    virtual void
+    stop();  // stop any activity immediatly and free owned buffers.
+    
     enum class ErrorType {
         IGNORE,
-        DISCONNECTED,
-        FATAL
+        DISCONNECTED,       // the remote has closed the connection. We may want to simply reconnect.
+        CONNECTION_TROUBLES,// some (temporary or not) troubles. Don't kill the connection, but inform the user.
+        FATAL   // fatal problem or bug. Impossible to continue.
     };
 
     virtual MsgSocket::ErrorType 
-    handleError() = 0; 
+    _determineErrorType(); 
     
 protected:
     virtual MsgSocket::ErrorType 
-    _getErrorType(int sock_err); 
+    _getRxErrorType(int sock_err);            // virtual since server and clients may behave diferently.
+    
+    virtual MsgSocket::ErrorType 
+    _getTxErrorType(int sock_err);   // virtual since server and clients may behave diferently.
     
     void    
     _sendLoop();
@@ -144,6 +157,14 @@ protected:
     ssize_t 
     _socketReceive(char *buffer, int buffer_length, int flags=0);
     
+    virtual void
+    _setState(State    new_state);
+    
+    virtual void
+    _txReset();
+
+    virtual void
+    _rxReset();
     
 private:
     /* obsolete code First implementation was  based on the use of the SIGIO signal because 
@@ -154,23 +175,37 @@ private:
 };
 
 
-
+/*
+ * peer_disconnection :
+ * exception reported by a socket detecting that the the connection has been closed remotely or lost.
+ * 
+ */
 class peer_disconnection : public std::exception
 {
     std::string       err_msg;
+    int sys_errno;
+    
 public:
     virtual const char* what() const noexcept override
     {
         return err_msg.c_str();
     };
     
-    peer_disconnection(std::string&& msg) 
-    : err_msg{msg} 
-    {};
+    peer_disconnection(std::string&& msg, int err = 0) 
+    {
+        
+        this -> err_msg = msg;
+        err_msg += ", errno:";
+        err_msg += err;
+        this -> sys_errno = err;
+    };
+    
     
     virtual ~peer_disconnection() = default;
 	
+    friend std::ostream& operator<< (std::ostream& o, const peer_disconnection& obj);
+    
 };
+//std::ostream& operator<< (std::ostream& o, const peer_disconnection& obj);
 
 #endif /* MSGSOCKET_H */
-

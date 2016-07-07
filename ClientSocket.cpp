@@ -24,6 +24,10 @@
 
 #include "ClientSocket.h"
 
+#include <libexplain/gcc_attributes.h>
+
+#include <libexplain/connect.h>
+
 ClientSocket::
 ClientSocket(const sockaddr_in& serverAddr, int socket_desc)
         : MsgSocket(serverAddr, socket_desc, TransferDirection::FROM_CLIENT)
@@ -42,10 +46,9 @@ void
 ClientSocket::
 connect()
 {
-    assert(sock_state == State::SOCK_NULL);
     assert(from == TransferDirection::FROM_CLIENT);
     
-    std::cout << "Client starting connection request...";
+    std::cout << "\nClient starting connection request...";
     
     sock_state = State::SOCK_CONNECTING;
     
@@ -54,14 +57,179 @@ connect()
     
     if (status < 0)
     {
-        if (status != EWOULDBLOCK && status != EINTR)
-            throw("client socket's connect() error");
+        assert(status == -1);
+        int err = errno;
+        /*
+        EADDRNOTAVAIL
+              The specified address is not available from the local machine.
+
+       EAFNOSUPPORT
+              The specified address is not a valid address for the address
+              family of the specified socket.
+
+       EALREADY
+              A connection request is already in progress for the specified
+              socket.
+
+       EBADF  The socket argument is not a valid file descriptor.
+
+       ECONNREFUSED
+              The target address was not listening for connections or
+              refused the connection request.
+
+       EINPROGRESS
+              O_NONBLOCK is set for the file descriptor for the socket and
+              the connection cannot be immediately established; the
+              connection shall be established asynchronously.
+
+       EINTR  The attempt to establish a connection was interrupted by
+              delivery of a signal that was caught; the connection shall be
+              established asynchronously.
+
+       EISCONN
+              The specified socket is connection-mode and is already
+              connected.
+
+       ENETUNREACH
+              No route to the network is present.
+
+       ENOTSOCK
+              The socket argument does not refer to a socket.
+
+       EPROTOTYPE
+              The specified address has a different type than the socket
+              bound to the specified peer address.
+
+       ETIMEDOUT
+              The attempt to connect timed out before a connection was made.
+
+       If the address family of the socket is AF_UNIX, then connect() shall
+       fail if:
+
+       EIO    An I/O error occurred while reading from or writing to the
+              file system.
+
+       ELOOP  A loop exists in symbolic links encountered during resolution
+              of the pathname in address.
+
+       ENAMETOOLONG
+              The length of a component of a pathname is longer than
+              {NAME_MAX}.
+
+       ENOENT A component of the pathname does not name an existing file or
+              the pathname is an empty string.
+
+       ENOTDIR
+              A component of the path prefix of the pathname in address
+              names an existing file that is neither a directory nor a
+              symbolic link to a directory, or the pathname in address
+              contains at least one non-<slash> character and ends with one
+              or more trailing <slash> characters and the last pathname
+              component names an existing file that is neither a directory
+              nor a symbolic link to a directory.
+
+       The connect() function may fail if:
+
+       EACCES Search permission is denied for a component of the path
+              prefix; or write access to the named socket is denied.
+
+       EADDRINUSE
+              Attempt to establish a connection that uses addresses that are
+              already in use.
+
+       ECONNRESET
+              Remote host reset the connection request.
+
+       EHOSTUNREACH
+              The destination host cannot be reached (probably because the
+              host is down or a remote router cannot reach it).
+
+       EINVAL The address_len argument is not a valid length for the address
+              family; or invalid address family in the sockaddr structure.
+
+       ELOOP  More than {SYMLOOP_MAX} symbolic links were encountered during
+              resolution of the pathname in address.
+
+       ENAMETOOLONG
+              The length of a pathname exceeds {PATH_MAX}, or pathname
+              resolution of a symbolic link produced an intermediate result
+              with a length that exceeds {PATH_MAX}.
+
+       ENETDOWN
+              The local network interface used to reach the destination is
+              down.
+
+       ENOBUFS
+              No buffer space is available.
+
+       EOPNOTSUPP
+              The socket is listening and cannot be connected.
+
+         */
+        switch (err)
+        {
+            case EINPROGRESS:
+                // normal case
+                break;
+                
+            case EINTR:
+                // normal even if unusual with non-blocking socket
+                break;
+                        
+            case ENOBUFS:   // system ressource issue
+            case ENETDOWN:  // no ethernet connection
+            case EHOSTUNREACH: // server is not running
+            case ECONNRESET:   // server is shutting down
+            case ECONNREFUSED: // server's firewall may be denying to use that port.
+            {
+                char message[3000];
+                explain_message_errno_connect(message, sizeof(message), 
+                                            err, 
+                                            socket_descr, 
+                                            (struct sockaddr *) &peer_ip_addr, 
+                                            sizeof(peer_ip_addr));
+                std::cerr << std::endl << message << std::endl;
+                throw "\n::connect() recoverable error ";                
+            }
+
+            case EAFNOSUPPORT: // bug
+            case EBADF:     // bug
+            case EPROTOTYPE:  // bug
+            case ENOTSOCK:    // bug
+            case EINVAL:    // bug
+            case EOPNOTSUPP:   // only server's socket is listening => bug
+            case EALREADY:  // should be prevented by state machine => bug
+            case EISCONN:   // should be prevented by state machine => bug
+                std::cerr << "\n::connect() bug, error " << err << std::endl;
+                assert(0);  // 
+                break;
+                
+            case EADDRINUSE: // to clarify
+            case EADDRNOTAVAIL: // to clarify
+            case ETIMEDOUT:     // to clarify
+                std::cerr << "\n::connect() unexpected error " << err << std::endl;
+                std::cerr.flush();
+                assert(0);  // 
+                break;
+                
+            // Errors related to AF_UNIX or AF_LOCAL address family : sockets for local IPC (Unix domain name sockets)
+            //    = > bug
+            case EIO:
+            case ELOOP:         // only on IPC sockets (Unix domain name sockets) = > bug
+            case ENAMETOOLONG:  // only on IPC sockets (Unix domain name sockets) = > bug
+            case EACCES:        // only on IPC sockets (Unix domain name sockets) = > bug
+            case ENOENT:
+            case ENOTDIR:
+            default:
+                assert(0);  // should NEVER happen
+                break;
+        }
     }
 }
 
 MsgSocket::ErrorType 
 ClientSocket::
-_getErrorType(int err) 
+_getRxErrorType(int err) 
 {
     MsgSocket::ErrorType err_type;
     
@@ -76,12 +244,29 @@ _getErrorType(int err)
                 err_type = MsgSocket::ErrorType::IGNORE;
             }
             else
-                err_type =  MsgSocket::_getErrorType(err);
+                err_type =  MsgSocket::_getRxErrorType(err);
             break;
                 
         default:     
             // default rtreatment.
-            err_type =  MsgSocket::_getErrorType(err);
+            err_type =  MsgSocket::_getRxErrorType(err);
+            break;
+    }
+
+    return err_type;
+}
+
+MsgSocket::ErrorType 
+ClientSocket::
+_getTxErrorType(int err) 
+{
+    MsgSocket::ErrorType err_type;
+    
+    switch (err)
+    {
+        default:     
+            // default treatment.
+            err_type =  MsgSocket::_getTxErrorType(err);
             break;
     }
 
@@ -89,33 +274,31 @@ _getErrorType(int err)
 }
 
 
-MsgSocket::ErrorType 
+
+void
 ClientSocket::
-handleError()
+_setState(State    new_state) 
 {
-    /* the POSIX recvmsg() has top be used to know the error type. */
-    char iobuffer[UIO_MAXIOV];
-    struct iovec dummy_iovec = {.iov_base = iobuffer, .iov_len = UIO_MAXIOV };
-    struct msghdr msg_hdr;
-    msg_hdr.msg_iov = &dummy_iovec;
-    msg_hdr.msg_iovlen = 1;
-    msg_hdr.msg_name = nullptr;     // because not an UDP stream
-    msg_hdr.msg_namelen = 0;        // because not an UDP stream
-    msg_hdr.msg_control = nullptr;
-    msg_hdr.msg_controllen = 0;
-    
-    ssize_t err = ::recvmsg(socket_descr, &msg_hdr, MSG_PEEK );
-    
-    // an error is expected on that socket, so -1 is expected.
-    assert(err == -1);
-    
-    return _getErrorType(errno);// usual errno.
+    switch(sock_state)
+    {
+        case MsgSocket::State::SOCK_CONNECTING:
+            
+            if (new_state == MsgSocket::State::SOCK_CONNECTED)
+            {
+            }
+            break;
+            
+        default:
+            break;
+    }
+    // call the parent's method
+    MsgSocket::_setState(new_state); 
 }
 
 
 bool 
 ClientSocket::
-pool()
+poll()
 {
     bool incoming_msg = false;
     
@@ -177,7 +360,7 @@ pool()
     
     if (stat < 0)
     {
-        // some abnormal situation happened, and the cause is to read in errno.
+        // An abnormal situation happened, and the cause is to read in errno.
         /*
             EAGAIN
                 The allocation of internal data structures failed but a subsequent request may succeed. 
@@ -190,7 +373,7 @@ pool()
         {
             case EAGAIN:
             case EINTR:
-                return incoming_msg;
+                return false;
             default:
                 assert(0);
         }
@@ -198,16 +381,16 @@ pool()
     else if (stat == 0)
     {
         // nothing in revent. So nothing to do.
-        return incoming_msg;
-    }
-    else if (fds.revents & POLLERR)
-    {
-        handleError();
+        return false;
     }
     else if (fds.revents & POLLHUP)
     {
-        sock_state = MsgSocket::State::SOCK_DISCONNECTED;
-        throw peer_disconnection{"socket disconnection (POLLHUP)"};
+        _setState(MsgSocket::State::SOCK_DISCONNECTED);
+        throw peer_disconnection{std::string{"socket disconnection (POLLHUP)"} };
+    }
+    else if (fds.revents & POLLERR)
+    {
+        _determineErrorType();
     }
     else 
     {
@@ -226,7 +409,7 @@ pool()
                  * A file descriptor for a socket that is connecting asynchronously shall indicate 
                  * that it is ready for writing, once a connection has been established. * 
                  */
-                sock_state = MsgSocket::State::SOCK_CONNECTED;
+                _setState(MsgSocket::State::SOCK_CONNECTED);
             }
             
             sendNextData();
@@ -235,3 +418,5 @@ pool()
     return incoming_msg;
     
 }
+
+

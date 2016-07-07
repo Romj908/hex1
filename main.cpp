@@ -28,6 +28,16 @@ extern int test2_circList(void);
 #include "gameServer.h"
 #include "gameClient.h"
 
+static std::string main_version{"VERSION 0.0.0 Beta"}; // temp. To be passed through from the main() paramenters
+
+extern const std::string& 
+mainVersionString()
+{
+    assert(main_version.size() < CLIENTSERVER_VERSION_STRING_LENGTH);
+    return main_version;
+}
+
+
 /*
  * 
  */

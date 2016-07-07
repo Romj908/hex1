@@ -17,7 +17,7 @@
 #include "hex1Protocol.h"
 
 #include "gameServer.h"
-
+#include "util/signalUtilities.h"
 
 
 GameServer *gameServer = nullptr;
@@ -106,15 +106,17 @@ void GameServer::handle_new_client_connection(ServerClientCnxPtr new_client)
 bool GameServer::IncomingConnectionRequest(struct sockaddr_in &clientAddr, int &clientSock) const
 {
     // poll on the main socket for new clients or for messages from registered clients.
-    int status;
+    int status = 0;
+    clientSock = -1;
     socklen_t addrLenght;
     addrLenght = sizeof(clientAddr);
     status = ::accept(server_socket, 
                         reinterpret_cast<struct sockaddr *>(&clientAddr), 
                         &addrLenght);
-    if (clientSock < 0)
+    if (status < 0)
     {
-        if (status == EAGAIN || status == EWOULDBLOCK)
+        int err = errno; 
+        if (err == EAGAIN || err == EWOULDBLOCK)
             return false;  // no pending request in the listen() queue)
         else
             throw("Server's accept() error");
@@ -142,19 +144,21 @@ void GameServer::server_loop()
         try
         {
             // Wait a new TCP connection from any client and create a corresponding object.
-            std::cout<< "\nserver_loop  1:";
             struct sockaddr_in clientAddr;
             int new_socket;
             if (IncomingConnectionRequest(clientAddr, new_socket))
             {
+                std::cout << "\nServer has accepted incoming connection!\n";
                 ServerClientCnxPtr new_client;
                 auto sock_desc = static_cast<hex1::socket_d>(new_socket);
                 new_client= ServerSocketsRouter::object()->CreateClientConnection(clientAddr, sock_desc );
             }
-            pause(); // wait for any signal.
-            //...
+
             // pool the incoming messages and send outgoing messages on any existing connection.
-            // to_do
+            ServerSocketsRouter::object()->ServeClientSockets();
+            
+            waitUsec(5*100*1000);   
+            std::cout << "."; std::cout.flush();
         }
         // handle typical socket exceptions (broken pipe,...))
         catch(...)

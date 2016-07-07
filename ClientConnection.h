@@ -22,8 +22,9 @@
 class ClientConnection
 {
     enum class CnxState {
-        NO_SOCKET,
-        NO_CONNECTION,
+        NO_SOCKET = 0,
+        CNX_ERROR = 1,
+        NO_CONNECTION = 2, // NO_CONNECTION has to be higher than CNX_ERROR
         CONNECTING,
         CONNECTED,
         REGISTERING,
@@ -31,7 +32,6 @@ class ClientConnection
         CLOSING,
         CNX_REJECTED,
         AUTH_REJECTED,
-        CNX_ERROR,
     };
     CnxState    cnx_state;
     
@@ -78,17 +78,18 @@ public:
     }
     
 public:
-    void 
-    configureSocket();
     
     void 
-    sendMsgToServer(ClientServerMsgBodyPtr msg_ptr);
+    startConnection();
+    
+    void 
+    sendMsgToServer(ClientServerMsgRequestUPtr&& msg_ptr);
     
     ClientServerMsgBodyPtr 
     receiveMsgFromServer();
     
     void 
-    user_registration();
+    user_registration();// to_do
     
     /* poll all pending incoming/outcoming data, if any. This function doesn't block. */
     void 
@@ -96,11 +97,17 @@ public:
     
 private:
     void 
+    configureSocket();
+    
+    void 
     handle_server_message(ClientServerL1MsgPtr p_msg);
     
 protected:
     virtual void 
     setState(CnxState new_state);
+    
+    void 
+    peerDisconnected();
     
     
     
