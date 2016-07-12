@@ -88,7 +88,12 @@ ServerClientConnection::
 sendMsgToClient(ClientServerMsgRequestUPtr&& msg_ptr)
 {
     std::cout << "\nsendMsgToClient #" << static_cast<ClientServerIdentity_t> (msg_ptr.get()->get_l1MsgId());
-    servSock->sendMsg(std::move(msg_ptr));
+    
+    // inform the router that some data have to be sent on that connection.
+    ServerSocketsRouter::object()->OutgoingDataForClient(this->servSock->getSocketDescr());
+    
+    // queue the request to send the message
+    servSock->sendMsg(std::move(msg_ptr));    
 }
 
 
@@ -128,6 +133,12 @@ sendConnectionRej(ConnectionRej::Cause cause)
     
     l2_msg_ptr->connection_rej.cause = cause;
     
+    auto p_version = reinterpret_cast<char *>(l2_msg_ptr->connection_rej.server_sw_version);
+    const auto server_version = mainVersionString();
+    server_version.copy(p_version, server_version.length());
+    p_version[server_version.length()+1] = '\0';
+    
+    
     auto send_msg_req_p = new ClientServerMsgRequest(l2_msg_ptr, sizeof(ConnectionRej), 
                                                      ClientServerL1MessageId::CONNECTION_REJ);
     
@@ -146,10 +157,7 @@ handleConnectionReq(ClientServerL1MsgPtr p_msg)
     
     if (state == State::EMPTY)
     {
-        // ensure that the last char of client_version[] is well '\0'
-        p_msg->l1_body.connection_req.client_version[CLIENTSERVER_VERSION_STRING_LENGTH-1] = 0;
-        
-        // copy the version into a std::string for manipulations.
+        // copy the version into a std::string for manipulations. It's null-terminated.
         std::string client_str{&p_msg->l1_body.connection_req.client_version[0]};
         
         if (client_str  == mainVersionString())
@@ -179,6 +187,13 @@ handleConnectionReq(ClientServerL1MsgPtr p_msg)
         sendConnectionRej(this ->last_rejected_cause);
         state = State::CONN_REJECTED;
     }
+}
+
+bool passwd_ok(const std::string& user_name, const std::string& passwd)
+{
+    // look into files or DB
+    //...  
+    return true;// to_do
 }
 
 bool known_user(const std::string& user_name )
@@ -212,7 +227,7 @@ sendRegistrationRej(RegistrationRej::Cause cause)
     l2_msg_ptr->registration_rej.cause = cause;
     
     auto send_msg_req_p = new ClientServerMsgRequest(l2_msg_ptr, sizeof(RegistrationRej), 
-                                                     ClientServerL1MessageId::REGISTRATE_REJ);
+                                                     ClientServerL1MessageId::REGISTRATION_REJ);
     
     ClientServerMsgRequestUPtr req {send_msg_req_p};
     
@@ -228,7 +243,7 @@ sendRegistrationCnf()
     ClientServerMsgBodyPtr l2_msg_ptr {new ClientServerMsgBody};
         
     auto send_msg_req_p = new ClientServerMsgRequest(l2_msg_ptr, sizeof(RegistrationCnf), 
-                                                     ClientServerL1MessageId::REGISTRATE_CNF);
+                                                     ClientServerL1MessageId::REGISTRATION_CNF);
     
     ClientServerMsgRequestUPtr req {send_msg_req_p};
     
@@ -244,32 +259,32 @@ handleRegistrationReq(ClientServerL1MsgPtr p_msg)
     if (state == State::REGISTERING)
     {
         /* normal path */
-        
-        auto p_name = reinterpret_cast<char*>(p_msg->l1_body.registration_req.user_name);
-        p_name[CLIENTSERVER_VERSION_STRING_LENGTH-1] = 0; // ensure it's a regular string.
+        // all the strings carried up in the message are null-terminated.
+        auto p_name = reinterpret_cast<const char*>(p_msg->l1_body.registration_req.user_name);
         this ->user_name = std::string{p_name};
         
-        auto p_email = reinterpret_cast<char*>(p_msg->l1_body.registration_req.mail_address);
-        p_email[CLIENTSERVER_USER_MAIL_STRING_LENGTH-1] = 0; // ensure it's a regular string.
-        this ->user_name = std::string{p_email};
+        auto p_email = reinterpret_cast<const char*>(p_msg->l1_body.registration_req.mail_address);
+        this ->user_email = std::string{p_email};
 
         /* check if that user name is already registered */
         if (known_user(this ->user_name))
         {
             // name already existing!
             sendRegistrationRej(RegistrationRej::Cause::USER_ALREADY_EXISTING);
-            state = State::REJECTED;            
         }
         else if (correct_email(p_email))
         {
             // bad mail format!
             sendRegistrationRej(RegistrationRej::Cause::INCORRECT_EMAIL);
-            state = State::REJECTED;                        
         }
         else
         {
             /* normal path */
+            auto p_pwd = reinterpret_cast<const char*>(p_msg->l1_body.registration_req.password);
+            this ->user_pwd = std::string{p_pwd};
+            
             sendRegistrationCnf();
+            
             state = State::REGISTERED;            
         }
         
@@ -278,23 +293,76 @@ handleRegistrationReq(ClientServerL1MsgPtr p_msg)
     {
         // abnormal situation
         sendRegistrationRej(RegistrationRej::Cause::UNEXPECTED_REGISTRATION);
-        state = State::REJECTED;                        
     }
 }
 
 void 
 ServerClientConnection::
-handleUserLogginReq(ClientServerL1MsgPtr p_msg) 
+sendUserLoginRej(UserLoginRej::Cause cause)
+{
+    // request the sending of a ConnectionReq to the server.
+    ClientServerMsgBodyPtr l2_msg_ptr {new ClientServerMsgBody};
+    
+    l2_msg_ptr->user_logging_rej.cause = cause;
+    
+    auto send_msg_req_p = new ClientServerMsgRequest(l2_msg_ptr, sizeof(UserLoginRej), 
+                                                     ClientServerL1MessageId::USER_LOGGING_REJ);
+    
+    ClientServerMsgRequestUPtr req {send_msg_req_p};
+    
+    this -> sendMsgToClient(std::move(req));
+    
+}
+
+void 
+ServerClientConnection::
+sendUserLoginCnf()
+{
+    // request the sending of a ConnectionReq to the server.
+    ClientServerMsgBodyPtr l2_msg_ptr {new ClientServerMsgBody};
+        
+    auto send_msg_req_p = new ClientServerMsgRequest(l2_msg_ptr, sizeof(UserLoginCnf), 
+                                                     ClientServerL1MessageId::USER_LOGGING_CNF);
+    
+    ClientServerMsgRequestUPtr req {send_msg_req_p};
+    
+    this -> sendMsgToClient(std::move(req));
+    
+}
+
+void 
+ServerClientConnection::
+handleUserLoginReq(ClientServerL1MsgPtr p_msg) 
 {
     if (state == State::REGISTERING)
     {
         /* normal path */
-        this ->user_name = std::string{p_msg->l1_body.registration_req.user_name};
+         // all the strings carried up in the message are null-terminated.
+        auto p_name = reinterpret_cast<const char*>(p_msg->l1_body.registration_req.user_name);
+        this ->user_name = std::string{p_name};
+        auto p_pwd = reinterpret_cast<const char*>(p_msg->l1_body.registration_req.password);
+        this ->user_pwd = std::string{p_pwd};
+        
         /* check if that user is registered */
+        if (!known_user(this ->user_name))
+        {
+            sendUserLoginRej(UserLoginRej::Cause::USER_UNKNOWN);
+        }
+        else if (!passwd_ok(this ->user_name, this ->user_pwd))
+        {
+            sendUserLoginRej(UserLoginRej::Cause::WRONG_PASSWORD);
+        }
+        else
+        {
+            // normal path
+            sendRegistrationCnf();
+            state = State::REGISTERED;                        
+        }
     }
     else
     {
         // abnormal situation
+        sendUserLoginRej(UserLoginRej::Cause::UNEXPECTED_LOGIN_PROC);
     }
 }
 
@@ -337,17 +405,17 @@ handle_client_message(ClientServerL1MsgPtr p_msg)
             handleConnectionReq(p_msg);
             break;
             
-        case ClientServerL1MessageId::LOGGING_REQ:
-            handleUserLogginReq(p_msg);
+        case ClientServerL1MessageId::USER_LOGGING_REQ:
+            handleUserLoginReq(p_msg);
             break;
 
-        case ClientServerL1MessageId::REGISTRATE_REQ:
+        case ClientServerL1MessageId::REGISTRATION_REQ:
             handleRegistrationReq(p_msg);
             break;
 
-        case ClientServerL1MessageId::DISCONNECT_REQ:
-        case ClientServerL1MessageId::DISCONNECT_CNF:
-        case ClientServerL1MessageId::DISCONNECT_IND:
+        case ClientServerL1MessageId::DISCONNECTION_REQ:
+        case ClientServerL1MessageId::DISCONNECTION_CNF:
+        case ClientServerL1MessageId::DISCONNECTION_IND:
             break;
 
         case ClientServerL1MessageId::POLL_REQ:
@@ -364,10 +432,10 @@ handle_client_message(ClientServerL1MsgPtr p_msg)
         /*ABNORMAL CASES*/
         case ClientServerL1MessageId::CONNECTION_CNF:
         case ClientServerL1MessageId::CONNECTION_REJ:
-        case ClientServerL1MessageId::LOGGING_CNF:
-        case ClientServerL1MessageId::LOGGING_REJ:
-        case ClientServerL1MessageId::REGISTRATE_CNF: 
-        case ClientServerL1MessageId::REGISTRATE_REJ:
+        case ClientServerL1MessageId::USER_LOGGING_CNF:
+        case ClientServerL1MessageId::USER_LOGGING_REJ:
+        case ClientServerL1MessageId::REGISTRATION_CNF: 
+        case ClientServerL1MessageId::REGISTRATION_REJ:
         default:
             // these messages are unexpected. Probably a bug.
             assert(0);
@@ -474,6 +542,24 @@ ReleaseClientConnection(hex1::socket_d clientSock)
     nb_client_connections--;
     
 }
+
+/* method called from the ServerClientConnection class when a socket has to be polled for outgoing data*/
+void 
+ServerSocketsRouter::
+OutgoingDataForClient(hex1::socket_d clientSock)
+{
+    ServerClientCnxPtr  client_cnx_ptr = socket_map.at(clientSock);
+
+    assert(client_cnx_ptr);   // bool operator
+    
+    if (!FD_ISSET(clientSock, &select_writefds))
+    {
+        std::cout << "\nFlag outgoing data to Client connection #" << clientSock;
+        FD_SET(clientSock, &select_writefds);
+    }
+    
+}
+
 
 void
 ServerSocketsRouter::
@@ -591,9 +677,10 @@ _serveSocketEmissions(SocketList &the_list )
     for (auto socket : the_list)
     {
         // route to the corresponding connection object. 
-            ServerClientCnxPtr  client_cnx_ptr = socket_map.at(socket); // throw std::out_of_range
+            ServerClientCnxPtr  client_cnx_ptr; 
             try
             {
+                ServerClientCnxPtr  client_cnx_ptr = socket_map.at(socket); // throw std::out_of_range
                 int again = client_cnx_ptr->socketDataWrite();
                 if (!again)
                 {
@@ -610,6 +697,10 @@ _serveSocketEmissions(SocketList &the_list )
 
                 nb++;  // the current one.
                 /*throw*/; // DON'T propagate the exception to higher level!
+            }
+            catch (std::out_of_range oor)
+            {
+                assert(0); // bug
             }
          nb++;  // for the current socket's emission.
     }    
@@ -631,7 +722,7 @@ ServeClientSockets(void)
         // prepare the pselect()'s bitmasks parameters
         
         _fdsCopy(clientsocks_fds, select_readfds); // incoming data is possible on all existing client sockets.
-        
+        //_fdsCopy(clientsocks_fds, select_writefds); // see OutgoingDataForClient()
         _fdsCopy(clientsocks_fds, select_errorfds); // errors are possible on all existing client sockets.
         
         // set the timeout to one second
@@ -666,6 +757,7 @@ ServeClientSockets(void)
 
             if (nb_act > 0)
             {
+                std::cout << "\nServeClientSockets emissions";
                 // serve outgoing data, if any 
                 _fdsExtractList(write_list, select_writefds);
                 nb_act -= _serveSocketEmissions(write_list);

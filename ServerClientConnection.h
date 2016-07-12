@@ -59,21 +59,29 @@ public:
         
     in_addr_t get_in_addr_t() const {return ipAddr.sin_addr.s_addr; }
     int       get_socket_descr() const {return servSock->getSocketDescr();}
+    State     get_state() const {return state;}
     
     const std::string& get_user_name() const { return user_name; } 
     
     void deny_connection();
+    
     void handleConnectionReq(ClientServerL1MsgPtr p_msg);
+    void sendConnectionCnf(ConnectionCnf::Cyphering ciph, const CipheringKeyData& ciph_key);
+    void sendConnectionRej(ConnectionRej::Cause cause);
+    
     void handleRegistrationReq(ClientServerL1MsgPtr p_msg);
-    void handleUserLogginReq(ClientServerL1MsgPtr p_msg);
+    void sendRegistrationCnf();
+    void sendRegistrationRej(RegistrationRej::Cause cause);
+    
+    void handleUserLoginReq(ClientServerL1MsgPtr p_msg);
+    void sendUserLoginCnf();
+    void sendUserLoginRej(UserLoginRej::Cause cause);
+    
+    
     void sendMsgToClient(ClientServerMsgRequestUPtr&& msg_ptr);
 
     void handle_client_message(ClientServerL1MsgPtr msg); // analyse the received message and route it accordingly
     
-    void sendConnectionCnf(ConnectionCnf::Cyphering ciph, const CipheringKeyData& ciph_key);
-    void sendConnectionRej(ConnectionRej::Cause cause);
-    void sendRegistrationCnf();
-    void sendRegistrationRej(RegistrationRej::Cause cause);
     
     bool socketError();  // An error occured on that connection. Handle it accordingly
     void socketDataRead();   // some incoming data have to be read
@@ -184,6 +192,7 @@ public:
     void
     ServeClientSockets();
     
+    void OutgoingDataForClient(hex1::socket_d clientSock);
 };
 
 

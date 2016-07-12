@@ -17,18 +17,18 @@
 #include <cstdint>   // int16_t, etc...
 
 /* Segment the socket flow in messages having a reasonnable size */
-#define CLIENTSERVER_MAX_L1_MSG_BODY_SIZE  (1024*8)
+constexpr size_t  CLIENTSERVER_MAX_L1_MSG_BODY_SIZE  {1024*8};
 
 /* some constants */
-#define CLIENTSERVER_VERSION_STRING_LENGTH  32
-#define CLIENTSERVER_USER_STRING_LENGTH  32
-#define CLIENTSERVER_USER_PASSWD_STRING_LENGTH  32
-#define CLIENTSERVER_USER_MAIL_STRING_LENGTH  128
+constexpr size_t  CLIENTSERVER_VERSION_STRING_LENGTH =  32;
+constexpr size_t  CLIENTSERVER_USER_STRING_LENGTH = 32;
+constexpr size_t  CLIENTSERVER_USER_PASSWD_STRING_LENGTH = 32;
+constexpr size_t  CLIENTSERVER_USER_MAIL_STRING_LENGTH = 128;
 
-#define CLIENTSERVER_FILE_NAME_LENGTH  256
+constexpr size_t  CLIENTSERVER_FILE_NAME_LENGTH = 256;
 
 
-#define CLIENTSERVER_CIPHERING_KEY_LENGTH  128   /* to_do*/
+constexpr int CLIENTSERVER_CIPHERING_KEY_LENGTH {128};   /* to_do*/
 
 using CipheringKeyData = char[CLIENTSERVER_CIPHERING_KEY_LENGTH];
 
@@ -71,17 +71,17 @@ enum class ClientServerL1MessageId
     CONNECTION_CNF,
     CONNECTION_REJ,
             
-    LOGGING_REQ,
-    LOGGING_CNF,
-    LOGGING_REJ,
+    USER_LOGGING_REQ,
+    USER_LOGGING_CNF,
+    USER_LOGGING_REJ,
             
-    REGISTRATE_REQ,
-    REGISTRATE_CNF, 
-    REGISTRATE_REJ,
+    REGISTRATION_REQ,
+    REGISTRATION_CNF, 
+    REGISTRATION_REJ,
             
-    DISCONNECT_REQ,
-    DISCONNECT_CNF,
-    DISCONNECT_IND,
+    DISCONNECTION_REQ,
+    DISCONNECTION_CNF,
+    DISCONNECTION_IND,
             
     POLL_REQ,
     POLL_CNF,
@@ -99,7 +99,7 @@ enum class ClientServerL1MessageId
 
 struct ConnectionReq
 {
-    char client_version[CLIENTSERVER_VERSION_STRING_LENGTH];// null terminated string (last significant character is \0)
+    char client_version[CLIENTSERVER_VERSION_STRING_LENGTH];
 };
 
 struct ConnectionCnf
@@ -118,26 +118,26 @@ struct ConnectionRej
     char        server_sw_version[CLIENTSERVER_VERSION_STRING_LENGTH];
 };
 
-struct UserLoggingReq
+struct UserLoginReq
 {
     char user_name[CLIENTSERVER_VERSION_STRING_LENGTH];
     char password[CLIENTSERVER_USER_PASSWD_STRING_LENGTH];
 };
-struct UserLoggingRej
+struct UserLoginRej
 {
-    enum Cause { NO_CAUSE, USER_UNKNOWN, WRONG_PASSWORD };
+    enum Cause { NO_CAUSE, USER_UNKNOWN, WRONG_PASSWORD, UNEXPECTED_LOGIN_PROC };
     Cause cause; 
 };
 
-struct UserLoggingCnf
+struct UserLoginCnf
 {
 };
 
 struct RegistrationReq
 {
-    char user_name[CLIENTSERVER_VERSION_STRING_LENGTH]; // null terminated string (last significant character is \0)
-    char password[CLIENTSERVER_USER_PASSWD_STRING_LENGTH];// null terminated string (last significant character is \0)
-    char mail_address[CLIENTSERVER_USER_MAIL_STRING_LENGTH];// null terminated string (last significant character is \0)
+    char user_name[CLIENTSERVER_VERSION_STRING_LENGTH]; 
+    char password[CLIENTSERVER_USER_PASSWD_STRING_LENGTH];
+    char mail_address[CLIENTSERVER_USER_MAIL_STRING_LENGTH];
 };
 
 struct RegistrationCnf
@@ -149,6 +149,16 @@ struct RegistrationRej
 {
     enum Cause { NO_CAUSE, USER_ALREADY_EXISTING, INCORRECT_EMAIL, UNEXPECTED_REGISTRATION };
     Cause cause; 
+};
+
+
+struct DisconnectionReq
+{
+    enum class Cause { NO_CAUSE, USER_SHUTDOWN };
+};
+
+struct DisconnectionCnf
+{
 };
 
 typedef long DataTransferId;
@@ -213,9 +223,9 @@ union ClientServerMsgBody
     RegistrationCnf registration_cnf;
     RegistrationRej registration_rej;
     
-    UserLoggingReq user_logging_req;
-    UserLoggingCnf user_logging_cnf;
-    UserLoggingRej user_logging_rej;
+    UserLoginReq user_logging_req;
+    UserLoginCnf user_logging_cnf;
+    UserLoginRej user_logging_rej;
     
     DataTransferReq     data_transfer_req;
     DataTransferBlk     data_transfer_blk;

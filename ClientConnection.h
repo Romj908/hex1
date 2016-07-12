@@ -15,6 +15,8 @@
 
 #include <signal.h>
 #include <list>  
+#include <set>  
+#include <mutex>  
 #include "ClientServerRequest.h"
 
 #include "ClientSocket.h"
@@ -26,6 +28,7 @@ class ClientConnection
         CNX_ERROR = 1,
         NO_CONNECTION = 2, // NO_CONNECTION has to be higher than CNX_ERROR
         CONNECTING,
+        CONNECTED_NO_CREDENTIALS,
         CONNECTED,
         REGISTERING,
         REGISTERED,
@@ -39,7 +42,32 @@ class ClientConnection
     std::string        ip_interface_name;
     
     std::unique_ptr<ClientSocket> clientSocket; // unique pointer to the socket object.
-
+    
+    ConnectionCnf::Cyphering ciphering;
+    CipheringKeyData         ciph_kea;
+    
+    /*
+     * External events : Interface with other threads(UI in particular)
+     */
+    
+    enum class CnxExtEvent : uint8_t {
+        NONE = 0,
+        NEW_CREDENTIALS,
+    };
+    
+    std::set<CnxExtEvent> ext_event{};
+    std::mutex            ext_mutext;
+    
+    void _setExtEvent(CnxExtEvent ev);
+    void _handleOneExtEvent(CnxExtEvent ev);
+    void _handleExtEvents();
+    
+    // logging/registration data. 
+    std::string user_name;
+    std::string user_passwd;
+    std::string user_email;
+    std::mutex  registration_mutext;
+    
     /*
         one unique instance of this class is allowed. Use a Singleton pattern.
      */
@@ -79,8 +107,11 @@ public:
     
 public:
     
+    
     void 
-    startConnection();
+    RegistrationDataFromUserInterface(const std::string& uname, 
+                                    const std::string& upasswd, 
+                                    const std::string& email);
     
     void 
     sendMsgToServer(ClientServerMsgRequestUPtr&& msg_ptr);
@@ -88,8 +119,21 @@ public:
     ClientServerMsgBodyPtr 
     receiveMsgFromServer();
     
-    void 
-    user_registration();// to_do
+    void sendConnectionReq();
+    void handleConnectionCnf(ClientServerL1MsgPtr p_msg);
+    void handleConnectionRej(ClientServerL1MsgPtr p_msg);
+    
+    void sendRegistrationReq();
+    void handleRegistrationCnf(ClientServerL1MsgPtr p_msg);
+    void handleRegistrationRej(ClientServerL1MsgPtr p_msg);
+    
+    void sendUserLoggingReq();
+    void handleUserLoggingCnf(ClientServerL1MsgPtr p_msg);
+    void handleUserLoggingRej(ClientServerL1MsgPtr p_msg);
+    
+    void handleDisconnectReq(ClientServerL1MsgPtr p_msg);
+    void handleDisconnectCnf(ClientServerL1MsgPtr p_msg);
+    
     
     /* poll all pending incoming/outcoming data, if any. This function doesn't block. */
     void 

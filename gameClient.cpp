@@ -16,6 +16,14 @@
 #include "util/signalUtilities.h"
 #include "util/ipUtilities.h"
 
+// temporary interface for the user interface dialog updating the connection object with the user name and password.
+// That function is called from the user's interface pthread.
+void client_account_data(std::string uname, std::string upasswd)
+{
+    ClientConnection::object()->sendConnectionReq();
+    
+}
+
 
 void client_cnx_init(const char *ip_interface_name)
 {
@@ -38,9 +46,8 @@ void client_cnx_init(const char *ip_interface_name)
     
     ClientConnection::createObject( serverAddrBuffer, interfaceName);   
     
-    ClientConnection::object()->startConnection();
+    ClientConnection::object()->sendConnectionReq();
     
-
 }
 
 void client_loop()
@@ -59,7 +66,7 @@ void client_loop()
     }
     catch(std::exception e)
     {
-        std::cout << "\nclient_loop() exception " << e.what();
+        std::cout << "\nclient_loop() exception " << e.what() << std::flush;
         throw;
     }
 

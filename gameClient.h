@@ -21,5 +21,7 @@
 
 extern void client_main(const char *ip_interface_name = "lo");
 
+extern void client_account_data(std::string uname, std::string upasswd);
+
 #endif /* GAMECLIENT_H */
 

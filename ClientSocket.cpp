@@ -358,6 +358,8 @@ poll()
     //int poll(struct pollfd fds[], nfds_t nfds, int timeout); 
     int stat = ::poll(&fds, 1, 0 /*shall return immediately*/);
     
+    std::cout << "*";
+    
     if (stat < 0)
     {
         // An abnormal situation happened, and the cause is to read in errno.
