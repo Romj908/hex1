@@ -372,6 +372,8 @@ _handleOneExtEvent(const CnxExtEvent ev)
         case CnxExtEvent::NEW_CREDENTIALS:
             setState(CnxState::CONNECTED);
             sendRegistrationReq();
+            setState(CnxState::REGISTERING);
+            
             break;
             
         default:
@@ -454,8 +456,10 @@ poll(void)
             do
             {
                 msg = clientSocket->getNextReceivedMsg();
-
-                handle_server_message(msg);
+                if (msg)
+                {
+                    handle_server_message(msg);                    
+                }
 
             } while (msg);
         }
