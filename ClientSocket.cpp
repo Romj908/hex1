@@ -388,7 +388,7 @@ poll()
     else if (fds.revents & POLLHUP)
     {
         _setState(MsgSocket::State::SOCK_DISCONNECTED);
-        throw peer_disconnection{std::string{"socket disconnection (POLLHUP)"} };
+        throw socket_disconnection{std::string{"socket disconnection (POLLHUP)"} };
     }
     else if (fds.revents & POLLERR)
     {

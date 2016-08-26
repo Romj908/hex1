@@ -22,7 +22,7 @@
 
 #include "MsgSocket.h"
 
-std::ostream& operator<< (std::ostream& o, const peer_disconnection& obj)
+std::ostream& operator<< (std::ostream& o, const socket_disconnection& obj)
 {
     std::string str1 {" errno: "};    
     o << std::endl << obj.err_msg << str1 << obj.sys_errno << std::flush;
@@ -76,10 +76,10 @@ void
 MsgSocket::
 discardDataBuffers()
 {
-    this -> _txReset();
+    // clear both Tx and Rx pending message queues. But any message currently in emission 
+    // and/or in reception is not touched to prevent any desynchronization between both ends 
+    // (messages boundaries)
     rx_fifo.clear();
-    
-    this -> _rxReset();
     tx_fifo.clear();
     
     std::cout << "\nSocket queues have been cleared.";
@@ -91,7 +91,13 @@ stop()
 {
     std::cout << "\nMsgSocket::stop";
     this -> discardDataBuffers();
+    this -> _txReset();
+    this -> _rxReset();
     sock_state = State::SOCK_NULL;
+    
+    ::close(socket_descr);
+    
+    socket_descr = -1; // invalid value.
 }
 
 void 
@@ -126,7 +132,7 @@ _socketSend(char *buffer, int buffer_length, int flags)
         {
             if (_getTxErrorType(errno) == ErrorType::DISCONNECTED)
             {
-                throw peer_disconnection{"MsgSocket::_socketSend", errno};                
+                throw socket_disconnection{"MsgSocket::_socketSend", errno};                
             }
         }
     }
@@ -138,20 +144,19 @@ void
 MsgSocket::
 _sendLoop()
 {
-    ClientServerRequestPtr req_ptr = tx_fifo.front();
+    ClientServerRequestPtr tx_req_ptr = tx_fifo.front();
     ssize_t nb_sent;
-    int length = 0;
     
     while (tx_state == TxState::TX_READY && !tx_fifo.empty())
     {
         
-        if (req_ptr->someDataToSend())
+        if (tx_req_ptr->someDataToSend())
         {
             if (!tx_msg) // bool operator.
             {
                 // retrieve the next L1 message 
                 int length = 0;
-                tx_msg = req_ptr->buildNextL2Msg(tx_l1_msg_id, length);
+                tx_msg = tx_req_ptr->buildNextL2Msg(tx_l1_msg_id, length);
                 std::cout << "MsgSocket::_sendLoop() next msg:" << static_cast<unsigned short>(tx_l1_msg_id) <<" length:"<< length<< std::endl;
                 tx_msg_length = length+sizeof(tx_header);
                 // knowing the length of the message we can build the L1 header
@@ -215,10 +220,12 @@ sendNextData()
     {
         _sendLoop();    
     }
-    catch (peer_disconnection tx_disc)
+    catch (socket_disconnection tx_disc)
     {
         std::cout << ref(tx_disc);
         std::cout << " MsgSocket::sendNextData()";
+        this -> _txReset();
+        this -> _rxReset();
         this -> discardDataBuffers();
         throw;
     }
@@ -229,12 +236,22 @@ sendNextData()
         return 1;
 }
 
+/*
+ * CAUTION That function may be called by several tasks (background, UI, debug...)
+ */
 void 
 MsgSocket::
-sendMsg(ClientServerMsgRequestUPtr&& msg_ptr)
+sendMsg(ClientServerMsgRequestUPtr&& msg_req_uptr)
 {
-    ClientServerRequestPtr the_req{ std::move(msg_ptr) }; // a unique_ptr can be moved to a shared_ptr
-    tx_fifo.push_back(the_req);
+    std::cout << "\nsendMsgToServer #" << static_cast<ClientServerIdentity_t> (msg_req_uptr.get()->get_l1MsgId());
+
+    ClientServerRequestPtr req_shptr{ std::move(msg_req_uptr) }; // a unique_ptr can be moved to a shared_ptr
+
+    {
+        // protect the tx_fifo against concurent accesses.
+        std::lock_guard<std::mutex> tx_fifo_lock (this ->tx_fifo_mutex);
+        tx_fifo.push_back(req_shptr);
+    }
 }
 
 DataTransferId 
@@ -260,7 +277,7 @@ _socketReceive(char *buffer, int buffer_length, int flags)
         {
             if (_getRxErrorType(errno) == ErrorType::DISCONNECTED)
             {
-                throw peer_disconnection{"_socketReceive unexpected error", errno};                
+                throw socket_disconnection{"_socketReceive unexpected error", errno};                
             }
         }
     }
@@ -368,9 +385,11 @@ recvNextData()
     {
         _recvLoop();    
     }
-    catch (peer_disconnection rx_disc)
+    catch (socket_disconnection rx_disc)
     {
         std::cout << rx_disc << " MsgSocket::recvNextData() disconnection";
+        this -> _txReset();
+        this -> _rxReset();
         this -> discardDataBuffers();
         throw;
     }

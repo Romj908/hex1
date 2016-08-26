@@ -21,7 +21,7 @@ constexpr size_t  CLIENTSERVER_MAX_L1_MSG_BODY_SIZE  {1024*8};
 
 /* some constants */
 constexpr size_t  CLIENTSERVER_VERSION_STRING_LENGTH =  32;
-constexpr size_t  CLIENTSERVER_USER_STRING_LENGTH = 32;
+constexpr size_t  CLIENTSERVER_USER_NAME_LENGTH = 32;
 constexpr size_t  CLIENTSERVER_USER_PASSWD_STRING_LENGTH = 32;
 constexpr size_t  CLIENTSERVER_USER_MAIL_STRING_LENGTH = 128;
 
@@ -80,8 +80,7 @@ enum class ClientServerL1MessageId
     REGISTRATION_REJ,
             
     DISCONNECTION_REQ,
-    DISCONNECTION_CNF,
-    DISCONNECTION_IND,
+    DISCONNECTION_CNF, 
             
     POLL_REQ,
     POLL_CNF,
@@ -154,7 +153,8 @@ struct RegistrationRej
 
 struct DisconnectionReq
 {
-    enum class Cause { NO_CAUSE, USER_SHUTDOWN };
+    enum class Cause { NO_CAUSE, USER_SHUTDOWN, SERVER_SHUTDOWN };
+    Cause cause; 
 };
 
 struct DisconnectionCnf
@@ -226,6 +226,9 @@ union ClientServerMsgBody
     UserLoginReq user_logging_req;
     UserLoginCnf user_logging_cnf;
     UserLoginRej user_logging_rej;
+    
+    DisconnectionReq disconnection_req;
+    DisconnectionCnf disconnection_cnf;
     
     DataTransferReq     data_transfer_req;
     DataTransferBlk     data_transfer_blk;

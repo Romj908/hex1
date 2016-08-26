@@ -33,6 +33,7 @@ class ServerClientConnection
         REGISTERING,     // loging procedure or signing procedure expected
         REJECTED,        // authentication failure (login procedure failure)
         REGISTERED,      // user has logged in or signed in.
+        DISCONNECTING,
         CLOSING
     };
 
@@ -77,7 +78,12 @@ public:
     void sendUserLoginCnf();
     void sendUserLoginRej(UserLoginRej::Cause cause);
     
+    void handleDisconnectionReq(ClientServerL1MsgPtr p_msg);
+    void sendDisconnectionCnf();
     
+    void sendDisconnectionReq();
+    void handleDisconnectionCnf(ClientServerL1MsgPtr p_msg);
+
     void sendMsgToClient(ClientServerMsgRequestUPtr&& msg_ptr);
 
     void handle_client_message(ClientServerL1MsgPtr msg); // analyse the received message and route it accordingly
@@ -88,7 +94,7 @@ public:
     int  socketDataWrite();  // some pending data can be written.
     
     void serverInitiatedClose();      // main server originated closure. Should rarely happen. Enter CLOSING state. 
-    void remoteInitialedClose();      // Remote client has closed the socket.  and .
+    void socketDisconnected();      // Remote client has closed the socket.  and .
     void fatalCnxError();
     
 private:

@@ -16,6 +16,7 @@
 
 #include <signal.h>
 #include <deque>  
+#include <mutex>  
 #include <exception>  
 #include <iostream>
 #include "ClientServerRequest.h"
@@ -69,8 +70,12 @@ protected:
     DataTransferId              ul_file_transfer_id;
     
     std::deque<ClientServerRequestPtr>    tx_fifo;
+    std::mutex                            tx_fifo_mutex;
+    
     std::deque<ClientServerL1MsgPtr>      rx_fifo;
-        
+    std::mutex                            rx_fifo_mutex;
+
+    
     MsgSocket(MsgSocket&) = delete;  // prevent override of the copy constructor
     MsgSocket& operator=(MsgSocket&) = delete;  // prevent copy
     
@@ -176,14 +181,14 @@ private:
 
 
 /*
- * peer_disconnection :
+ * socket_disconnection :
  * exception reported by a socket detecting that the the connection has been closed remotely or lost.
  * 
  */
-class peer_disconnection : public std::exception
+class socket_disconnection : public std::exception
 {
     std::string       err_msg;
-    int sys_errno;
+    int               sys_errno;
     
 public:
     virtual const char* what() const noexcept override
@@ -191,21 +196,20 @@ public:
         return err_msg.c_str();
     };
     
-    peer_disconnection(std::string&& msg, int err = 0) 
+    socket_disconnection(std::string&& msg, int err = 0) 
     {
         
-        this -> err_msg = msg;
+        err_msg = msg;
         err_msg += ", errno:";
         err_msg += err;
-        this -> sys_errno = err;
+        sys_errno = err;
     };
     
     
-    virtual ~peer_disconnection() = default;
+    virtual ~socket_disconnection() = default;
 	
-    friend std::ostream& operator<< (std::ostream& o, const peer_disconnection& obj);
+    friend std::ostream& operator<< (std::ostream& o, const socket_disconnection& obj);
     
 };
-//std::ostream& operator<< (std::ostream& o, const peer_disconnection& obj);
 
 #endif /* MSGSOCKET_H */

@@ -41,8 +41,7 @@ socketError()
             
         case MsgSocket::ErrorType::DISCONNECTED:
             clear_io_indicators = true; 
-            
-            this->remoteInitialedClose();
+            this->socketDisconnected();
             break;
             
         case MsgSocket::ErrorType::FATAL:
@@ -368,7 +367,64 @@ handleUserLoginReq(ClientServerL1MsgPtr p_msg)
 
 void 
 ServerClientConnection::
-remoteInitialedClose()
+ handleDisconnectionReq(ClientServerL1MsgPtr p_msg)
+{
+    // the server is shuttting down
+    assert(p_msg->l1_body.disconnection_req.cause == DisconnectionReq::Cause::USER_SHUTDOWN);
+    
+    // inform the upper layers that the connection is going to an end (UI)
+    // to_do
+    
+    // send the acknowledgement
+    sendDisconnectionCnf();
+    
+    // wait for the socket closure (socket_disconnection exception)
+    state = State::CLOSING;
+    
+}
+void 
+ServerClientConnection::
+ sendDisconnectionCnf()
+{
+      // request the sending of a ConnectionReq to the server.
+        ClientServerMsgBodyPtr l2_msg_ptr {new ClientServerMsgBody};
+
+        auto send_msg_req_p = new ClientServerMsgRequest(l2_msg_ptr, sizeof(DisconnectionCnf), 
+                                                         ClientServerL1MessageId::DISCONNECTION_CNF);
+        ClientServerMsgRequestUPtr req {send_msg_req_p};
+
+        this -> sendMsgToClient(std::move(req));
+    
+}
+
+void 
+ServerClientConnection::
+ sendDisconnectionReq()
+{
+        ClientServerMsgBodyPtr l2_msg_ptr {new ClientServerMsgBody};
+
+        l2_msg_ptr->disconnection_req.cause = DisconnectionReq::Cause::SERVER_SHUTDOWN;
+        
+        auto send_msg_req_p = new ClientServerMsgRequest(l2_msg_ptr, sizeof(DisconnectionReq), 
+                                                         ClientServerL1MessageId::DISCONNECTION_REQ);
+        ClientServerMsgRequestUPtr req {send_msg_req_p};
+
+        this -> sendMsgToClient(std::move(req));
+    
+}
+void 
+ServerClientConnection::
+handleDisconnectionCnf(ClientServerL1MsgPtr p_msg)
+{
+    assert(state == State::DISCONNECTING);
+    servSock->stop();
+    state = State::CLOSING;
+    
+}
+
+void 
+ServerClientConnection::
+socketDisconnected()
 {
     std::cout << "\nremoteInitialedClose Client connection #" << this->servSock;
     this->servSock->stop();
@@ -414,10 +470,13 @@ handle_client_message(ClientServerL1MsgPtr p_msg)
             break;
 
         case ClientServerL1MessageId::DISCONNECTION_REQ:
-        case ClientServerL1MessageId::DISCONNECTION_CNF:
-        case ClientServerL1MessageId::DISCONNECTION_IND:
+            handleDisconnectionReq(p_msg);
             break;
-
+            
+        case ClientServerL1MessageId::DISCONNECTION_CNF:
+            handleDisconnectionCnf(p_msg);
+            break;
+            
         case ClientServerL1MessageId::POLL_REQ:
         case ClientServerL1MessageId::POLL_CNF:
             break;
@@ -656,10 +715,10 @@ _serveSocketReceptions(SocketList &the_list )
             nb++;  // the current one.
         }
         
-        catch (peer_disconnection disc)
+        catch (socket_disconnection disc)
         {
             std::cout << disc << " on connection #" << socket;
-            client_cnx_ptr -> remoteInitialedClose();
+            client_cnx_ptr -> socketDisconnected();
             dead_list.push_back(socket);
             
             nb++;  // the current one.
@@ -689,10 +748,10 @@ _serveSocketEmissions(SocketList &the_list )
                 }
                 
             }
-            catch (peer_disconnection disc)
+            catch (socket_disconnection disc)
             {
                 std::cout << disc << " on connection #" << socket;
-                client_cnx_ptr -> remoteInitialedClose();
+                client_cnx_ptr -> socketDisconnected();
                 dead_list.push_back(socket);
 
                 nb++;  // the current one.

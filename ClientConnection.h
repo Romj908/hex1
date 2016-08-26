@@ -32,7 +32,8 @@ class ClientConnection
         CONNECTED,
         REGISTERING,
         REGISTERED,
-        CLOSING,
+        DISCONNECTING,     // having sent the DISCONNECT_REQ
+        CLOSING,           // DISCONNECT_CNF 
         CNX_REJECTED,
         AUTH_REJECTED,
     };
@@ -105,8 +106,12 @@ public:
         clientModeConnection = nullptr;
     }
     
+    /*************************************************************************** 
+     * 
+     *          Interface to the user interface thread 
+     * 
+     **************************************************************************/
 public:
-    
     
     void 
     RegistrationDataFromUserInterface(const std::string& uname, 
@@ -119,21 +124,9 @@ public:
     ClientServerMsgBodyPtr 
     receiveMsgFromServer();
     
-    void sendConnectionReq();
-    void handleConnectionCnf(ClientServerL1MsgPtr p_msg);
-    void handleConnectionRej(ClientServerL1MsgPtr p_msg);
+    void StartConnectionToServer();
     
-    void sendRegistrationReq();
-    void handleRegistrationCnf(ClientServerL1MsgPtr p_msg);
-    void handleRegistrationRej(ClientServerL1MsgPtr p_msg);
-    
-    void sendUserLoggingReq();
-    void handleUserLoggingCnf(ClientServerL1MsgPtr p_msg);
-    void handleUserLoggingRej(ClientServerL1MsgPtr p_msg);
-    
-    void handleDisconnectReq(ClientServerL1MsgPtr p_msg);
-    void handleDisconnectCnf(ClientServerL1MsgPtr p_msg);
-    
+    void StopConnectionToServer( bool flush);
     
     /* poll all pending incoming/outcoming data, if any. This function doesn't block. */
     void 
@@ -146,12 +139,30 @@ private:
     void 
     handle_server_message(ClientServerL1MsgPtr p_msg);
     
+    void sendConnectionReq();
+    void handleConnectionCnf(ClientServerL1MsgPtr p_msg);
+    void handleConnectionRej(ClientServerL1MsgPtr p_msg);
+    
+    void sendRegistrationReq();
+    void handleRegistrationCnf(ClientServerL1MsgPtr p_msg);
+    void handleRegistrationRej(ClientServerL1MsgPtr p_msg);
+    
+    void sendUserLoginReq();
+    void handleUserLoginCnf(ClientServerL1MsgPtr p_msg);
+    void handleUserLoginRej(ClientServerL1MsgPtr p_msg);
+    
+    void handleDisconnectionReq(ClientServerL1MsgPtr p_msg);
+    void handleDisconnectionCnf(ClientServerL1MsgPtr p_msg);
+    void sendDisconnectionReq();
+    void sendDisconnectionCnf();
+    
+    
 protected:
     virtual void 
     setState(CnxState new_state);
     
     void 
-    peerDisconnected();
+    socketDisconnected(const socket_disconnection& disc);
     
     
     

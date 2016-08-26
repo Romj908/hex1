@@ -41,6 +41,37 @@ ClientConnection(const struct sockaddr_in &serverAddr,
         this -> configureSocket();
 }
 
+void 
+ClientConnection::
+StartConnectionToServer()
+{
+    setState(CnxState::CONNECTING);
+
+    clientSocket->connect();
+    
+    // we immediately send a connection req message through the socket, even if not yet up.
+    // it will be queued and sent by the socket object once in CONNECTED state.
+    sendConnectionReq();
+        
+}
+
+void 
+ClientConnection::
+StopConnectionToServer(bool flush)
+{
+    setState(CnxState::DISCONNECTING);
+
+    if (flush)
+    {
+        clientSocket->discardDataBuffers();
+    }
+    // we immediately send a connection req message through the socket, even if not yet up.
+    // it will be queued and sent by the socket object once in CONNECTED state.
+    sendDisconnectionReq();
+        
+}
+
+
 
 void 
 ClientConnection::
@@ -134,7 +165,9 @@ handleConnectionRej(ClientServerL1MsgPtr p_msg)
         default:
             assert(0);
     }
-    throw peer_disconnection{std::move(txt)};
+    std::cout << txt << std::endl;
+    // inform upper layer (UI) to_do
+
 }
 
 void 
@@ -173,17 +206,20 @@ ClientConnection::
 handleRegistrationCnf(ClientServerL1MsgPtr p_msg)
 {
     setState(CnxState::REGISTERED);
+    // inform upper layer (UI) to_do
 }
 void 
 ClientConnection::
 handleRegistrationRej(ClientServerL1MsgPtr p_msg)
 {
-    assert(0); // to_do
+    setState(CnxState::CONNECTED_NO_CREDENTIALS);
+    // inform upper layer (UI) to_do
+    
 }
 
 void 
 ClientConnection::
-sendUserLoggingReq()
+sendUserLoginReq()
 {
        // request the sending of a ConnectionReq to the server.
         ClientServerMsgBodyPtr l2_msg_ptr {new ClientServerMsgBody};
@@ -205,30 +241,78 @@ sendUserLoggingReq()
 
 void 
 ClientConnection::
-handleUserLoggingCnf(ClientServerL1MsgPtr p_msg)
+handleUserLoginCnf(ClientServerL1MsgPtr p_msg)
 {
-    
+    setState(CnxState::REGISTERED);
+    // inform upper layer (UI) to_do
 }
 void 
 ClientConnection::
-handleUserLoggingRej(ClientServerL1MsgPtr p_msg)
+handleUserLoginRej(ClientServerL1MsgPtr p_msg)
 {
+    setState(CnxState::AUTH_REJECTED);
+    // inform upper layer (UI) to_do
+
+}
+
+void 
+ClientConnection::
+handleDisconnectionReq(ClientServerL1MsgPtr p_msg)
+{
+    // the server is shuttting down
+    assert(p_msg->l1_body.disconnection_req.cause == DisconnectionReq::Cause::SERVER_SHUTDOWN);
+    
+    // inform the upper layers that the connection is going to an end (UI)
+    // to_do
+    
+    // send the acknowledgement
+    sendDisconnectionCnf();
+    
+    // wait for the socket closure (socket_disconnection exception)
+    setState(CnxState::CLOSING);
     
 }
 
 void 
 ClientConnection::
-handleDisconnectReq(ClientServerL1MsgPtr p_msg)
+ sendDisconnectionCnf()
 {
+      // request the sending of a ConnectionReq to the server.
+        ClientServerMsgBodyPtr l2_msg_ptr {new ClientServerMsgBody};
+
+        auto send_msg_req_p = new ClientServerMsgRequest(l2_msg_ptr, sizeof(DisconnectionCnf), 
+                                                         ClientServerL1MessageId::DISCONNECTION_CNF);
+        ClientServerMsgRequestUPtr req {send_msg_req_p};
+
+        this -> sendMsgToServer(std::move(req));
     
 }
+
+
 void 
 ClientConnection::
-handleDisconnectCnf(ClientServerL1MsgPtr p_msg)
+sendDisconnectionReq()
 {
-    
+        ClientServerMsgBodyPtr l2_msg_ptr {new ClientServerMsgBody};
+
+        l2_msg_ptr->disconnection_req.cause = DisconnectionReq::Cause::USER_SHUTDOWN;
+        
+        auto send_msg_req_p = new ClientServerMsgRequest(l2_msg_ptr, sizeof(DisconnectionReq), 
+                                                         ClientServerL1MessageId::DISCONNECTION_REQ);
+        ClientServerMsgRequestUPtr req {send_msg_req_p};
+
+        this -> sendMsgToServer(std::move(req));
 }
-    
+
+void 
+ClientConnection::
+handleDisconnectionCnf(ClientServerL1MsgPtr p_msg)
+{
+    assert(cnx_state == CnxState::DISCONNECTING);
+    clientSocket->stop();
+    setState(CnxState::CLOSING);
+}
+
 
 void 
 ClientConnection::
@@ -245,7 +329,11 @@ handle_server_message(ClientServerL1MsgPtr p_msg)
             break;
             
         case ClientServerL1MessageId::USER_LOGGING_CNF:
+            handleUserLoginCnf(p_msg);
+            break;
+            
         case ClientServerL1MessageId::USER_LOGGING_REJ:
+            handleUserLoginRej(p_msg);
             break;
 
         case ClientServerL1MessageId::REGISTRATION_CNF: 
@@ -257,8 +345,11 @@ handle_server_message(ClientServerL1MsgPtr p_msg)
             break;
 
         case ClientServerL1MessageId::DISCONNECTION_REQ:
+            handleDisconnectionReq(p_msg);
+            break;
+            
         case ClientServerL1MessageId::DISCONNECTION_CNF:
-        case ClientServerL1MessageId::DISCONNECTION_IND:
+            handleDisconnectionCnf(p_msg);
             break;
 
         case ClientServerL1MessageId::POLL_REQ:
@@ -293,6 +384,7 @@ setState(CnxState new_state)
             break;
             
         case CnxState::CONNECTING: 
+            assert(cnx_state == CnxState::NO_SOCKET);
             break;
             
         case CnxState::CONNECTED_NO_CREDENTIALS:
@@ -347,10 +439,6 @@ configureSocket()
     else
     {
         clientSocket.reset(new ClientSocket(server_ip_addr, sock));
-        
-        setState(CnxState::CONNECTING);
-        
-        clientSocket->connect();
     }
 
 }
@@ -414,9 +502,14 @@ RegistrationDataFromUserInterface(
         this ->user_email = email;
         
         // reserve one char for the null character.
-        this ->user_name.resize(CLIENTSERVER_VERSION_STRING_LENGTH-1);
-        this ->user_passwd.resize(CLIENTSERVER_USER_PASSWD_STRING_LENGTH-1);
-        this ->user_email.resize(CLIENTSERVER_USER_MAIL_STRING_LENGTH-1);
+        if (this ->user_name.size() >= CLIENTSERVER_USER_NAME_LENGTH)
+            this ->user_name.resize(CLIENTSERVER_USER_NAME_LENGTH-1);
+        
+        if (this ->user_passwd.size() >= CLIENTSERVER_USER_PASSWD_STRING_LENGTH)
+            this ->user_passwd.resize(CLIENTSERVER_USER_PASSWD_STRING_LENGTH-1);
+        
+        if (this ->user_email.size() >= CLIENTSERVER_USER_MAIL_STRING_LENGTH)
+            this ->user_email.resize(CLIENTSERVER_USER_MAIL_STRING_LENGTH-1);
         
         this ->_setExtEvent(CnxExtEvent::NEW_CREDENTIALS);
 }
@@ -425,11 +518,15 @@ RegistrationDataFromUserInterface(
 
 void
 ClientConnection::
-peerDisconnected()
+socketDisconnected(const socket_disconnection& disc)
 {
+    
     setState(CnxState::NO_CONNECTION);
     
     // all outgoing/incoming data have already been flushed by the socket
+    
+    // inform the upper level (for UI information, and eventually degraded mode/reconnection)
+    // to_do
 }
 
 void 
@@ -464,10 +561,10 @@ poll(void)
             } while (msg);
         }
     }
-    catch (peer_disconnection disc)
+    catch (socket_disconnection disc)
     {
         std::cout << disc.what();
-        peerDisconnected(); // to_do
+        socketDisconnected(disc); // to_do
         //throw; // donn't propagate the exception to higher level
     }
     
@@ -478,7 +575,6 @@ void
 ClientConnection::
 sendMsgToServer(ClientServerMsgRequestUPtr&& msg_ptr)
 {
-    std::cout << "\nsendMsgToServer #" << static_cast<ClientServerIdentity_t> (msg_ptr.get()->get_l1MsgId());
     clientSocket->sendMsg(std::move(msg_ptr));
 }
 
