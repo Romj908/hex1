@@ -57,6 +57,9 @@ void
 MsgSocket::
 _txReset()
 {
+    // protect the tx_fifo against concurent accesses.
+    std::lock_guard<std::mutex> tx_fifo_lock (this ->tx_fifo_mutex);
+    
     tx_state = TxState::TX_INIT;
     tx_length = 0;
     tx_msg_length = 0;
@@ -140,14 +143,40 @@ _socketSend(char *buffer, int buffer_length, int flags)
     return nb_sent;
 }
 
+/*
+ * this method dequeues the head of the tx FIFO, taking care of mutual exclusion
+ * against the different threads 
+ */
+ClientServerRequestPtr 
+MsgSocket::
+_txPopNextRequest()
+{
+    // protect the tx_fifo against concurent accesses.
+    std::lock_guard<std::mutex> tx_fifo_lock (this ->tx_fifo_mutex);
+    
+    if (!tx_fifo.empty())
+    {
+        ClientServerRequestPtr tx_head;
+        tx_head = tx_fifo.front();
+        tx_fifo.pop_front();
+        return tx_head;
+    }
+    else
+        return nullptr;
+}
+
 void 
 MsgSocket::
 _sendLoop()
 {
-    ClientServerRequestPtr tx_req_ptr = tx_fifo.front();
     ssize_t nb_sent;
     
-    while (tx_state == TxState::TX_READY && !tx_fifo.empty())
+    if (tx_req_ptr == nullptr)
+    {
+        tx_req_ptr = _txPopNextRequest();
+    }
+    
+    while (tx_state == TxState::TX_READY && tx_req_ptr != nullptr)
     {
         
         if (tx_req_ptr->someDataToSend())
@@ -201,7 +230,7 @@ _sendLoop()
             // request has been served. Prepare move to the next one. 
             assert(tx_length == 0);    // we must have fully sent the precedent message. 
             assert(tx_msg_length == 0);      
-            tx_fifo.pop_front(); // remove the element from the pending queue
+            tx_req_ptr = _txPopNextRequest(); // skip to the next element from the pending queue
             tx_l1_msg_id = ClientServerL1MessageId::NONE;
         }
         
@@ -230,7 +259,7 @@ sendNextData()
         throw;
     }
     
-    if (tx_fifo.empty())
+    if (tx_req_ptr == nullptr)
         return 0;
     else
         return 1;

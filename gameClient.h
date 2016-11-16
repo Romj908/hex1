@@ -14,6 +14,9 @@
 #ifndef GAMECLIENT_H
 #define GAMECLIENT_H
 
+#include <thread>
+
+
 /**
  * Class handling the application in client mode.
  * 

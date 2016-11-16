@@ -8,6 +8,11 @@
 #include <memory>
 #include <signal.h>
 #include <fcntl.h>
+#include <utility>
+#include <thread>
+#include <chrono>
+#include <functional>
+#include <atomic>
 
 #include "gameClient.h"
 
@@ -16,6 +21,19 @@
 #include "util/signalUtilities.h"
 #include "util/ipUtilities.h"
 
+void client_ui_thread_f(void)
+{
+    int ui_loop_cnt=0;
+    std::cout << "UI Thread executing\n";
+    while ( ui_loop_cnt <20)
+    {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            std::cout << ":";
+            ui_loop_cnt++;
+    }
+    std::cout << "UI Thread ending\n";
+    std::cout.flush();
+}
 
 void client_cnx_init(const char *ip_interface_name)
 {
@@ -42,11 +60,11 @@ void client_cnx_init(const char *ip_interface_name)
     
 }
 
-void client_loop()
+void client_bg_loop(bool& application_end)
 {
     try
     {
-        while (1)
+        while (!application_end)
         {
             ClientConnection::object()->poll();
 
@@ -58,14 +76,15 @@ void client_loop()
     }
     catch(std::exception e)
     {
-        std::cout << "\nclient_loop() exception " << e.what() << std::flush;
+        std::cout << "\nclient_bg_loop() exception " << e.what() << std::flush;
         throw;
     }
 
 }
 
 
-void client_main(const char *ip_interface_name)
+
+void client_background_main(const char *ip_interface_name, bool& application_end)
 {
     try
     {
@@ -73,7 +92,7 @@ void client_main(const char *ip_interface_name)
         client_cnx_init(ip_interface_name);
         
         // main loop of the client application.
-        client_loop();
+        client_bg_loop(application_end);
         
     }
     // handling al the exceptions, in particular the shutdown of the server itself
@@ -84,4 +103,24 @@ void client_main(const char *ip_interface_name)
         std::cout.flush();
     }
 
+}
+
+void client_main(const char *ip_interface_name)
+{
+    bool application_end = false;    // temp
+    
+    // starts the UI thread
+    std::thread client_ui_thread(client_ui_thread_f);
+    //std::unique_ptr<std::thread> 
+    
+    // jump into the bqackground task's loop
+    client_background_main(ip_interface_name, application_end);
+    
+    // synchronize both bg and UI threads at shutdown.
+    client_ui_thread.join();
+    
+    std::cout << "client_main() shutdown\n";
+    std::cout.flush();
+
+    
 }

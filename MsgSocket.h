@@ -71,6 +71,7 @@ protected:
     
     std::deque<ClientServerRequestPtr>    tx_fifo;
     std::mutex                            tx_fifo_mutex;
+    ClientServerRequestPtr                tx_req_ptr;
     
     std::deque<ClientServerL1MsgPtr>      rx_fifo;
     std::mutex                            rx_fifo_mutex;
@@ -146,6 +147,9 @@ protected:
     
     virtual MsgSocket::ErrorType 
     _getTxErrorType(int sock_err);   // virtual since server and clients may behave diferently.
+    
+    ClientServerRequestPtr 
+    _txPopNextRequest();
     
     void    
     _sendLoop();
